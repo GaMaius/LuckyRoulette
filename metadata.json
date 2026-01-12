@@ -1,0 +1,7 @@
+{
+  "name": "Lucky Strike AI",
+  "description": "A premium social slot machine game featuring real-time AI luck prophecies powered by Gemini, high-stakes betting, global rankings, and comprehensive user profile management.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
