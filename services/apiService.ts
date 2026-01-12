@@ -1,73 +1,86 @@
 
+import Gun from 'gun';
 import { User, Message } from '../types';
 
 /**
- * [중요] 실제 서버로 공유하려면 이 클래스의 각 메서드를 
- * Firebase, Supabase 또는 본인의 API 서버 fetch 호출로 교체하면 됩니다.
- * 현재는 중앙 집중식 Mock Server 역할을 수행합니다.
+ * Gun.js를 사용하여 서버 없이 기기 간 실시간 데이터 공유를 구현합니다.
+ * 공용 릴레이 서버(Peers)를 사용하여 Vercel 배포 후에도 모든 유저 데이터가 공유됩니다.
  */
+const gun = Gun([
+  'https://gun-manhattan.herokuapp.com/gun',
+  'https://gun-us.herokuapp.com/gun'
+]);
+
+// 데이터베이스 노드 정의
+const db = gun.get('lucky-strike-v3-production');
+const usersNode = db.get('users');
+const messagesNode = db.get('messages');
+const eventsNode = db.get('events');
+
 class ApiService {
-  private DB_KEY = 'lucky_strike_shared_db_v2';
-  private CHAT_KEY = 'lucky_strike_shared_chat_v2';
-  private EVENTS_KEY = 'lucky_strike_shared_events_v2';
-
-  private async simulateNetwork() {
-    return new Promise(resolve => setTimeout(resolve, 300));
-  }
-
   // --- 사용자 관련 ---
-  async getUsers(): Promise<Record<string, User>> {
-    await this.simulateNetwork();
-    const data = localStorage.getItem(this.DB_KEY);
-    return data ? JSON.parse(data) : {};
+  // 실시간 구독을 위해 콜백을 받습니다.
+  subscribeUsers(callback: (users: Record<string, User>) => void) {
+    usersNode.map().on((data, id) => {
+      if (data) {
+        // Gun.js의 메타데이터 제외 및 데이터 정제
+        const { _, ...user } = data as any;
+        callback({ [id]: user as User });
+      }
+    });
   }
 
   async saveUser(user: User): Promise<void> {
-    await this.simulateNetwork();
-    const users = await this.getUsers();
-    users[user.id] = user;
-    localStorage.setItem(this.DB_KEY, JSON.stringify(users));
+    usersNode.get(user.id).put(user as any);
   }
 
   async deleteUser(userId: string): Promise<void> {
-    const users = await this.getUsers();
-    delete users[userId];
-    localStorage.setItem(this.DB_KEY, JSON.stringify(users));
+    usersNode.get(userId).put(null as any);
   }
 
   // --- 채팅 관련 ---
-  async getMessages(): Promise<Message[]> {
-    await this.simulateNetwork();
-    const data = localStorage.getItem(this.CHAT_KEY);
-    return data ? JSON.parse(data) : [];
+  subscribeMessages(callback: (msg: Message) => void) {
+    messagesNode.map().on((data) => {
+      if (data) {
+        const { _, ...msg } = data as any;
+        callback(msg as Message);
+      }
+    });
   }
 
   async sendMessage(msg: Message): Promise<void> {
-    const messages = await this.getMessages();
-    messages.push(msg);
-    if (messages.length > 100) messages.shift();
-    localStorage.setItem(this.CHAT_KEY, JSON.stringify(messages));
+    messagesNode.set(msg as any);
   }
 
-  // --- 실시간 이벤트 로그 관련 (리얼 이벤트 공유) ---
+  // --- 실시간 이벤트 로그 관련 ---
+  subscribeEvents(callback: (event: string) => void) {
+    eventsNode.map().on((data) => {
+      if (typeof data === 'string') {
+        callback(data);
+      }
+    });
+  }
+
   async logEvent(message: string): Promise<void> {
-    const data = localStorage.getItem(this.EVENTS_KEY);
-    const events: string[] = data ? JSON.parse(data) : [];
-    events.push(message);
-    if (events.length > 20) events.shift(); // 최근 20개 유지
-    localStorage.setItem(this.EVENTS_KEY, JSON.stringify(events));
+    eventsNode.set(message);
   }
 
-  async getLatestEvents(): Promise<string[]> {
-    const data = localStorage.getItem(this.EVENTS_KEY);
-    return data ? JSON.parse(data) : ["서버에 연결되었습니다. 행운을 빕니다!"];
+  // 초기 로드를 위한 헬퍼 (필요 시)
+  async getUsersOnce(): Promise<Record<string, User>> {
+    return new Promise((resolve) => {
+      const results: Record<string, User> = {};
+      usersNode.once((data) => {
+        // 단일 노드 로드 시 map()으로 처리 필요
+      });
+      // Gun은 비동기 스트림이므로 구독 방식을 권장합니다.
+      resolve(results);
+    });
   }
 }
 
 export const api = new ApiService();
 
-// 기존 가상 생성기 대신 실제 로그에서 가져오는 방식으로 변경을 유도하기 위한 헬퍼
+// 현재는 Gun.js 내부에서 직접 처리하므로 헬퍼 함수는 간소화
 export const getLiveActivity = async () => {
-  const events = await api.getLatestEvents();
-  return events[events.length - 1];
+  return "실시간 데이터 동기화 중...";
 };

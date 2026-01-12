@@ -17,25 +17,37 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshGlobalData = useCallback(async () => {
-    const [fetchedUsers, fetchedMessages] = await Promise.all([
-      api.getUsers(),
-      api.getMessages()
-    ]);
-    setUsers(fetchedUsers);
-    setMessages(fetchedMessages);
+  useEffect(() => {
+    // 1. 유저 데이터 실시간 구독
+    api.subscribeUsers((newUserData) => {
+      setUsers(prev => ({ ...prev, ...newUserData }));
+    });
+
+    // 2. 메시지 실시간 구독
+    api.subscribeMessages((newMsg) => {
+      setMessages(prev => {
+        // 중복 방지 (Gun.js 재전송 대응)
+        if (prev.find(m => m.id === newMsg.id)) return prev;
+        const updated = [...prev, newMsg].sort((a, b) => a.timestamp - b.timestamp);
+        return updated.slice(-100); // 최근 100개 유지
+      });
+    });
+
+    // 앱 초기화 지연 (연결 대기용)
+    const timer = setTimeout(() => setIsLoading(false), 1500);
+    return () => clearTimeout(timer);
   }, []);
 
+  // 현재 로그인한 유저의 최신 정보를 users 상태에서 동기화
   useEffect(() => {
-    const initApp = async () => {
-      await refreshGlobalData();
-      setIsLoading(false);
-    };
-    initApp();
-
-    const interval = setInterval(refreshGlobalData, 5000);
-    return () => clearInterval(interval);
-  }, [refreshGlobalData]);
+    if (currentUser && users[currentUser.id]) {
+      const serverUser = users[currentUser.id];
+      // 무한 루프 방지를 위해 값이 다를 때만 업데이트
+      if (JSON.stringify(serverUser) !== JSON.stringify(currentUser)) {
+        setCurrentUser(serverUser);
+      }
+    }
+  }, [users, currentUser]);
 
   const handleLogin = async (user: User, isNew: boolean = false) => {
     const updatedUser = { 
@@ -45,15 +57,13 @@ const App: React.FC = () => {
     };
     await api.saveUser(updatedUser);
     
-    // 리얼 이벤트 로그 기록
     if (isNew) {
-      await api.logEvent(`✨ 신규 유저 [${updatedUser.id}]님이 럭키 스트라이크에 합류했습니다!`);
+      await api.logEvent(`✨ 신규 유저 [${updatedUser.id}]님이 합류했습니다!`);
     } else {
       await api.logEvent(`👋 [${updatedUser.nick || updatedUser.id}]님이 접속했습니다.`);
     }
 
     setCurrentUser(updatedUser);
-    await refreshGlobalData();
   };
 
   const handleLogout = useCallback(() => {
@@ -64,23 +74,17 @@ const App: React.FC = () => {
 
   const updateUser = useCallback(async (updatedUser: User) => {
     await api.saveUser(updatedUser);
-    setUsers(prev => ({ ...prev, [updatedUser.id]: updatedUser }));
-    if (currentUser?.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
-    }
-  }, [currentUser]);
+  }, []);
 
   const deleteUser = useCallback(async (userId: string) => {
     await api.deleteUser(userId);
     if (currentUser?.id === userId) {
       setCurrentUser(null);
     }
-    await refreshGlobalData();
-  }, [currentUser, refreshGlobalData]);
+  }, [currentUser]);
 
   const addMessage = async (msg: Message) => {
     await api.sendMessage(msg);
-    setMessages(prev => [...prev, msg]);
   };
 
   if (isLoading) {
@@ -88,7 +92,7 @@ const App: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="text-yellow-500 flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-black italic tracking-tighter">SERVER CONNECTING...</p>
+          <p className="font-black italic tracking-tighter">ESTABLISHING P2P CLOUD...</p>
         </div>
       </div>
     );

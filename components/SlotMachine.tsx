@@ -18,25 +18,19 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
   const [prophecy, setProphecy] = useState<string>('운명의 한 마디를 불러오는 중...');
   const [liveActivity, setLiveActivity] = useState<string>("서버에 연결 중...");
 
-  const fetchLatestEvent = useCallback(async () => {
-    const events = await api.getLatestEvents();
-    if (events.length > 0) {
-      setLiveActivity(events[events.length - 1]);
-    }
-  }, []);
-
   useEffect(() => {
+    // 1. 운세 업데이트 (로컬)
     const fetchProphecy = async () => {
       const tip = await getAILuckProphecy(user.nick || user.id, user.balance, reels.join(','));
       setProphecy(tip);
     };
     fetchProphecy();
-    fetchLatestEvent();
 
-    // 4초마다 실제 서버 로그 업데이트 확인
-    const interval = setInterval(fetchLatestEvent, 4000);
-    return () => clearInterval(interval);
-  }, [user.id, user.balance, user.nick, reels, fetchLatestEvent]);
+    // 2. 실시간 이벤트 로그 구독
+    api.subscribeEvents((newEvent) => {
+      setLiveActivity(newEvent);
+    });
+  }, [user.id, user.balance, user.nick, reels]);
 
   const spin = async () => {
     if (isSpinning) return;
@@ -94,7 +88,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
       multiplier = 20; 
       message = "🎰 잭팟 폭발!!! (+20배)"; 
       color = "text-yellow-400 animate-bounce";
-      // 리얼 이벤트 기록
       await api.logEvent(`💰 잭팟! [${user.nick || user.id}]님이 ${(betAmount * 20).toLocaleString()}원 당첨!`);
     }
     else if (maxMatch === 4) { 
@@ -110,10 +103,14 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
     }
 
     const profit = betAmount * multiplier;
-    onUpdateUser({ ...user, balance: user.balance + profit });
+    const nextBalance = user.balance + profit;
+    
+    // 데이터베이스 업데이트 (공유됨)
+    onUpdateUser({ ...user, balance: nextBalance });
+    
     setGameLog({ msg: `${message} ${profit > 0 ? '+' : ''}${profit.toLocaleString()}원`, color });
 
-    if (user.balance + profit <= 0) {
+    if (nextBalance <= 0) {
       alert('파산하셨습니다! 기본 자금 100만원이 재충전됩니다.');
       onUpdateUser({ ...user, balance: 1000000 });
       await api.logEvent(`💸 [${user.nick || user.id}]님이 파산하여 재기 중입니다.`);
@@ -122,7 +119,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
 
   return (
     <div className="flex flex-col gap-5 animate-fadeIn">
-      {/* 실제 유저 활동 티커 (Real Event Only) */}
       <div className="bg-red-500/10 border border-red-500/20 py-2.5 px-4 rounded-xl overflow-hidden shadow-inner flex items-center gap-2">
         <span className="flex-shrink-0 text-[8px] bg-red-600 text-white px-1.5 py-0.5 rounded-sm font-black animate-pulse">LIVE</span>
         <p className="text-[10px] font-black text-red-500 italic whitespace-nowrap overflow-hidden text-ellipsis">
@@ -130,7 +126,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
         </p>
       </div>
 
-      {/* 애니메이션 운세 섹션 (No AI) */}
       <div className="bg-zinc-800/80 rounded-2xl p-4 border border-yellow-500/20 shadow-lg min-h-[90px] flex flex-col justify-center relative overflow-hidden">
         <div className="absolute top-0 right-0 p-2 opacity-10">
           <i className="fas fa-scroll text-4xl text-yellow-500"></i>
@@ -144,7 +139,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
         </p>
       </div>
 
-      {/* 슬롯 머신 UI */}
       <div className="bg-zinc-800 border-4 border-yellow-500 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
         <div className="flex justify-center gap-2 mb-6">
           {reels.map((symbol, i) => (
