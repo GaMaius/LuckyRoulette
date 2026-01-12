@@ -2,21 +2,14 @@
 import { GoogleGenAI } from "@google/genai";
 
 /**
- * 환경 변수를 모든 환경(Vercel, Vite, Node)에서 안전하게 가져오는 함수
+ * 환경 변수에서 API KEY를 가져옵니다.
+ * 지침에 따라 process.env.API_KEY를 주축으로 하되, 
+ * 클라이언트 환경(Vercel 등)의 NEXT_PUBLIC 접두사를 고려합니다.
  */
-const getEnv = (key: string): string => {
-  try {
-    // 1. Standard process.env
-    if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key] as string;
-    // 2. Vite / Meta env
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) return import.meta.env[key] as string;
-    // 3. Window injected process
-    if (typeof window !== 'undefined' && (window as any).process?.env?.[key]) return (window as any).process.env[key];
-    return "";
-  } catch (e) {
-    return "";
-  }
+const getApiKey = (): string => {
+  // @ts-ignore
+  const key = process.env.API_KEY || process.env.NEXT_PUBLIC_API_KEY || (window as any).process?.env?.NEXT_PUBLIC_API_KEY;
+  return key || "";
 };
 
 const ANIME_FORTUNES = [
@@ -29,11 +22,10 @@ const ANIME_FORTUNES = [
 ];
 
 export const getAILuckProphecy = async (username: string, balance: number, lastResult?: string) => {
-  // Vercel 클라이언트 측 접근을 위해 NEXT_PUBLIC_ 접두사가 붙은 키를 우선 확인
-  const apiKey = getEnv("NEXT_PUBLIC_API_KEY") || getEnv("API_KEY");
+  const apiKey = getApiKey();
 
-  if (!apiKey || apiKey === "undefined" || apiKey === "null") {
-    console.warn("⚠️ Gemini API Key가 감지되지 않았습니다. Vercel에서 NEXT_PUBLIC_API_KEY를 설정하고 Redeploy 하세요.");
+  if (!apiKey || apiKey === "undefined") {
+    console.warn("⚠️ [Gemini] API Key가 유효하지 않습니다. Vercel Redeploy 여부를 확인하세요.");
     return getRandomFallbackFortune();
   }
 
@@ -52,7 +44,7 @@ export const getAILuckProphecy = async (username: string, balance: number, lastR
     return getRandomFallbackFortune();
 
   } catch (error) {
-    console.error("❌ Gemini API Error:", error);
+    console.error("❌ [Gemini] API Error:", error);
     return getRandomFallbackFortune();
   }
 };
