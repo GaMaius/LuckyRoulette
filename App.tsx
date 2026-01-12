@@ -1,24 +1,32 @@
 
 import React, { useState, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { User } from './types';
+import { User, Message } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import Auth from './components/Auth';
 import SlotMachine from './components/SlotMachine';
 import Ranking from './components/Ranking';
 import Profile from './components/Profile';
 import Admin from './components/Admin';
+import Chat from './components/Chat';
 import Layout from './components/Layout';
 
 const DB_KEY = 'lucky_strike_v2_db';
+const CHAT_DB_KEY = 'lucky_strike_chat_db';
 
 const App: React.FC = () => {
   const [users, setUsers] = useLocalStorage<Record<string, User>>(DB_KEY, {});
+  const [messages, setMessages] = useLocalStorage<Message[]>(CHAT_DB_KEY, []);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const getEnvironment = (): 'PC' | 'Mobile' => {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'Mobile' : 'PC';
+  };
 
   const handleLogin = (user: User) => {
     const now = Date.now();
-    const updatedUser = { ...user, lastLogin: now };
+    const env = getEnvironment();
+    const updatedUser = { ...user, lastLogin: now, environment: env };
     
     setUsers(prev => ({
       ...prev,
@@ -31,7 +39,6 @@ const App: React.FC = () => {
   const handleLogout = useCallback(() => {
     if (window.confirm('정말로 로그아웃 하시겠습니까?')) {
       setCurrentUser(null);
-      // 세션 상태가 null이 되면 Routes의 Navigate에 의해 /login으로 자동 이동합니다.
     }
   }, []);
 
@@ -58,6 +65,10 @@ const App: React.FC = () => {
     }
   }, [currentUser, setUsers]);
 
+  const addMessage = (msg: Message) => {
+    setMessages(prev => [...prev, msg]);
+  };
+
   return (
     <Router>
       <div className="flex justify-center min-h-screen bg-black">
@@ -73,6 +84,9 @@ const App: React.FC = () => {
               <Route path="/" element={<Layout user={currentUser} onLogout={handleLogout} />}>
                 <Route index element={<SlotMachine user={currentUser} onUpdateUser={updateUser} />} />
                 <Route path="rank" element={<Ranking users={users} />} />
+                <Route path="chat" element={<Chat user={currentUser} users={users} messages={messages} onSendMessage={addMessage} />} />
+                <Route path="chat/:targetId" element={<Chat user={currentUser} users={users} messages={messages} onSendMessage={addMessage} />} />
+                <Route path="inquiry" element={<Navigate to="/chat/admin" replace />} />
                 <Route path="profile" element={<Profile user={currentUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={handleLogout} />} />
                 <Route path="profile/:id" element={<Profile user={currentUser} targetUsers={users} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={handleLogout} />} />
                 {currentUser.isAdmin && (

@@ -14,7 +14,14 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users, setUsers }) => {
   const navigate = useNavigate();
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
   const [error, setError] = useState('');
+
+  const validatePassword = (password: string) => {
+    // 영문, 숫자, 특수문자 포함 6자 이상 정규식
+    const regex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/;
+    return regex.test(password);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,10 +33,21 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users, setUsers }) => {
     }
 
     if (mode === 'signup') {
+      if (pw !== confirmPw) {
+        setError('비밀번호가 일치하지 않습니다.');
+        return;
+      }
+
+      if (!validatePassword(pw)) {
+        setError('보안 경고: 비밀번호는 영문, 숫자, 특수문자를 포함하여 6자리 이상이어야 합니다.');
+        return;
+      }
+
       if (users[id]) {
         setError('이미 사용 중인 아이디입니다.');
         return;
       }
+
       const newUser: User = {
         id,
         pw,
@@ -99,7 +117,20 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users, setUsers }) => {
           />
         </div>
 
-        {error && <p className="text-red-500 text-xs font-bold text-center animate-pulse">{error}</p>}
+        {mode === 'signup' && (
+          <div className="flex flex-col gap-1.5 animate-fadeIn">
+            <label className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-1">비밀번호 확인</label>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl py-4 px-5 font-bold text-white focus:outline-none focus:border-yellow-500 transition-all"
+              placeholder="비밀번호를 다시 입력하세요"
+            />
+          </div>
+        )}
+
+        {error && <p className="text-red-500 text-[10px] font-bold text-center animate-pulse leading-tight">{error}</p>}
 
         <button
           type="submit"

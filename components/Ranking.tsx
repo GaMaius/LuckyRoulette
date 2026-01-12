@@ -35,22 +35,36 @@ const Ranking: React.FC<RankingProps> = ({ users }) => {
         {sortedUsers.map((u, idx) => (
           <div
             key={u.id}
-            onClick={() => navigate(`/profile/${u.id}`)}
-            className="group bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-2xl p-4 flex items-center gap-4 transition-all active:scale-[0.98] cursor-pointer"
+            className="group bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4 flex items-center gap-4 transition-all"
           >
             <div className={`w-8 font-black text-center ${getRankStyle(idx)}`}>
               {idx === 0 ? <i className="fas fa-crown"></i> : idx + 1}
             </div>
-            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-zinc-700 group-hover:border-yellow-500 transition-colors">
+            <div 
+              className="w-12 h-12 rounded-full overflow-hidden border-2 border-zinc-700 group-hover:border-yellow-500 transition-colors cursor-pointer"
+              onClick={() => navigate(`/profile/${u.id}`)}
+            >
               <img src={u.img || DEFAULT_PROFILE_IMG} alt={u.id} className="w-full h-full object-cover" />
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="font-black text-zinc-100 truncate">{u.nick || u.id}</p>
-              <p className="text-[10px] text-zinc-500 truncate">{u.bio || '자기소개가 등록되지 않았습니다.'}</p>
+              <p className="font-black text-zinc-100 truncate cursor-pointer" onClick={() => navigate(`/profile/${u.id}`)}>{u.nick || u.id}</p>
+              <p className="text-[10px] text-zinc-500 truncate">₩{u.balance.toLocaleString()}</p>
             </div>
-            <div className="text-right whitespace-nowrap">
-              <p className="text-sm font-black text-green-400">₩{u.balance.toLocaleString()}</p>
-              <p className="text-[9px] font-bold text-zinc-600 uppercase">보유 자산</p>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => navigate(`/chat/${u.id}`)}
+                className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center text-xs text-zinc-300 hover:bg-yellow-500 hover:text-black transition-all"
+                title="1:1 채팅"
+              >
+                <i className="fas fa-comment"></i>
+              </button>
+              <button 
+                onClick={() => navigate(`/profile/${u.id}`)}
+                className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center text-xs text-zinc-300 hover:bg-blue-500 hover:text-white transition-all"
+                title="프로필 보기"
+              >
+                <i className="fas fa-user"></i>
+              </button>
             </div>
           </div>
         ))}

@@ -15,11 +15,15 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
   const navItems = [
     { path: '/', label: '게임', icon: 'fa-gamepad' },
     { path: '/rank', label: '랭킹', icon: 'fa-trophy' },
+    { path: '/chat', label: '채팅', icon: 'fa-comments' },
     { path: '/profile', label: '내 정보', icon: 'fa-user' },
   ];
 
+  // 가장 오른쪽에 관리자 여부에 따라 다른 메뉴 추가
   if (user.isAdmin) {
-    navItems.push({ path: '/admin', label: '관리자', icon: 'fa-cog' });
+    navItems.push({ path: '/admin', label: '관리', icon: 'fa-tools' });
+  } else {
+    navItems.push({ path: '/inquiry', label: '문의', icon: 'fa-headset' });
   }
 
   return (
@@ -53,7 +57,18 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
       {/* 하단 내비게이션 바 */}
       <nav className="h-20 bg-zinc-800/90 backdrop-blur-lg border-t border-zinc-700 fixed bottom-0 left-0 right-0 max-w-md mx-auto flex items-center justify-around px-2 z-50">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isHome = item.path === '/';
+          const isChat = item.path === '/chat' || item.path === '/inquiry';
+          
+          let isActive = false;
+          if (isHome) {
+            isActive = location.pathname === '/';
+          } else if (item.path === '/inquiry') {
+            isActive = location.pathname === '/inquiry' || location.pathname === '/chat/admin';
+          } else {
+            isActive = location.pathname.startsWith(item.path);
+          }
+
           return (
             <Link
               key={item.path}
