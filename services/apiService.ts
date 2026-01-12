@@ -3,8 +3,20 @@ import Gun from 'gun';
 import { User, Message, SharedMedia } from '../types';
 
 /**
- * 기본 공용 릴레이 피어 리스트
+ * 환경 변수를 안전하게 가져오는 함수
  */
+const getEnv = (key: string): string => {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key] as string;
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) return import.meta.env[key] as string;
+    if (typeof window !== 'undefined' && (window as any).process?.env?.[key]) return (window as any).process.env[key];
+    return "";
+  } catch (e) {
+    return "";
+  }
+};
+
 const PUBLIC_PEERS = [
   'https://gun-manhattan.herokuapp.com/gun',
   'https://gunjs.herokuapp.com/gun',
@@ -21,22 +33,26 @@ class ApiService {
   async init(): Promise<void> {
     if (gunInstance) return;
 
-    // 1. 전용 서버 주소 확인 (Vercel Environment Variables에서 설정한 값)
-    // 브라우저 환경에서는 process.env 대신 글로벌 변수나 인젝션된 값을 참조할 수 있도록 함
-    const envPeers = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GUN_PEERS) 
-      ? process.env.NEXT_PUBLIC_GUN_PEERS.split(',') 
-      : [];
+    // 환경 변수에서 피어 목록 가져오기
+    const rawPeers = getEnv("NEXT_PUBLIC_GUN_PEERS");
+    const envPeers = rawPeers ? rawPeers.split(',').map(p => p.trim()) : [];
     
-    // 2. 전용 서버를 리스트의 맨 앞에 두어 우선순위 부여
-    const finalPeers = [...new Set([...envPeers, ...PUBLIC_PEERS])];
+    // 피어 주소 정제 (https -> wss 자동 변환)
+    const processPeerUrl = (url: string) => {
+      if (!url) return "";
+      // Gun.js는 브라우저에서 보통 wss를 선호함
+      return url.replace('http://', 'ws://').replace('https://', 'wss://');
+    };
 
-    console.log('📡 Initializing Gun with Peers:', finalPeers);
+    const finalPeers = [...new Set([...envPeers.map(processPeerUrl), ...PUBLIC_PEERS.map(processPeerUrl)])].filter(Boolean);
+
+    console.log('📡 Gun Mesh Connecting to:', finalPeers);
 
     gunInstance = Gun({
       peers: finalPeers,
       localStorage: true,
       radisk: true,
-      retry: 2000
+      retry: 3000
     });
 
     gunInstance.on('hi', (peer: any) => {
@@ -50,6 +66,14 @@ class ApiService {
       connectedPeers.delete(peer.url);
       this.notifyStatus();
     });
+    
+    // 5초 후에도 연결된 피어가 없으면 경고 출력
+    setTimeout(() => {
+      if (connectedPeers.size === 0) {
+        console.warn("⚠️ 실시간 서버 연결에 실패했습니다. 로컬 캐시 모드로 작동합니다.");
+        this.notifyStatus();
+      }
+    }, 5000);
   }
 
   private notifyStatus() {

@@ -2,9 +2,22 @@
 import { GoogleGenAI } from "@google/genai";
 
 /**
- * 이 서비스는 Gemini API를 사용하여 사용자에게 
- * 애니메이션 스타일의 운세 명대사를 제공합니다.
+ * 환경 변수를 모든 환경(Vercel, Vite, Node)에서 안전하게 가져오는 함수
  */
+const getEnv = (key: string): string => {
+  try {
+    // 1. Standard process.env
+    if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key] as string;
+    // 2. Vite / Meta env
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) return import.meta.env[key] as string;
+    // 3. Window injected process
+    if (typeof window !== 'undefined' && (window as any).process?.env?.[key]) return (window as any).process.env[key];
+    return "";
+  } catch (e) {
+    return "";
+  }
+};
 
 const ANIME_FORTUNES = [
   { anime: "강철의 연금술사", quote: "사람은 무언가의 희생 없이는 아무것도 얻을 수 없다. 무언가를 얻기 위해서는 동등한 대가가 필요하다.", character: "에드워드 엘릭" },
@@ -16,20 +29,17 @@ const ANIME_FORTUNES = [
 ];
 
 export const getAILuckProphecy = async (username: string, balance: number, lastResult?: string) => {
-  // 1. API 키가 설정되어 있는지 확인
-  const apiKey = process.env.API_KEY;
+  // Vercel 클라이언트 측 접근을 위해 NEXT_PUBLIC_ 접두사가 붙은 키를 우선 확인
+  const apiKey = getEnv("NEXT_PUBLIC_API_KEY") || getEnv("API_KEY");
 
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    console.warn("⚠️ Gemini API Key가 설정되지 않았습니다. Vercel Settings에서 API_KEY를 등록해주세요.");
+  if (!apiKey || apiKey === "undefined" || apiKey === "null") {
+    console.warn("⚠️ Gemini API Key가 감지되지 않았습니다. Vercel에서 NEXT_PUBLIC_API_KEY를 설정하고 Redeploy 하세요.");
     return getRandomFallbackFortune();
   }
 
   try {
-    // 2. API 호출 직전에 인스턴스 생성 (Lazy Init)
-    const genAI = new GoogleGenAI({ apiKey: apiKey });
-    
-    // Gemini 3 Flash 모델 사용
-    const response = await genAI.models.generateContent({
+    const ai = new GoogleGenAI({ apiKey: apiKey });
+    const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `당신은 슬롯머신 게임 "럭키 스트라이크"의 점술가입니다.
 사용자: ${username}, 잔액: ${balance}원, 결과: ${lastResult || '시작'}
@@ -42,12 +52,11 @@ export const getAILuckProphecy = async (username: string, balance: number, lastR
     return getRandomFallbackFortune();
 
   } catch (error) {
-    console.error("❌ Gemini API 호출 중 오류 발생:", error);
+    console.error("❌ Gemini API Error:", error);
     return getRandomFallbackFortune();
   }
 };
 
-// API가 안될 때 보여줄 랜덤 운세
 function getRandomFallbackFortune() {
   const randomIndex = Math.floor(Math.random() * ANIME_FORTUNES.length);
   const f = ANIME_FORTUNES[randomIndex];
