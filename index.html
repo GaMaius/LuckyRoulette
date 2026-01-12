@@ -24,6 +24,17 @@
       0% { transform: translateY(-5px); }
       100% { transform: translateY(5px); }
     }
+    /* 스크롤바 커스텀 */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #3f3f46;
+      border-radius: 10px;
+    }
   </style>
 <script type="importmap">
 {
@@ -39,5 +50,7 @@
 </head>
 <body class="bg-zinc-950 text-zinc-100">
   <div id="root"></div>
+  <!-- Vercel 및 일반 브라우저 환경을 위한 엔트리 포인트 추가 -->
+  <script type="module" src="./index.tsx"></script>
 </body>
 </html>
