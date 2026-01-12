@@ -17,32 +17,41 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 실시간 구독 설정
   useEffect(() => {
+    let isMounted = true;
+
     // 1. 유저 데이터 실시간 구독
     api.subscribeUsers((newUserData) => {
+      if (!isMounted) return;
       setUsers(prev => ({ ...prev, ...newUserData }));
     });
 
     // 2. 메시지 실시간 구독
     api.subscribeMessages((newMsg) => {
+      if (!isMounted) return;
       setMessages(prev => {
-        // 중복 방지 (Gun.js 재전송 대응)
         if (prev.find(m => m.id === newMsg.id)) return prev;
         const updated = [...prev, newMsg].sort((a, b) => a.timestamp - b.timestamp);
-        return updated.slice(-100); // 최근 100개 유지
+        return updated.slice(-100); 
       });
     });
 
-    // 앱 초기화 지연 (연결 대기용)
-    const timer = setTimeout(() => setIsLoading(false), 1500);
-    return () => clearTimeout(timer);
+    // 충분한 피어 연결 시간을 위해 로딩 지연
+    const timer = setTimeout(() => {
+      if (isMounted) setIsLoading(false);
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, []);
 
-  // 현재 로그인한 유저의 최신 정보를 users 상태에서 동기화
+  // 현재 세션 유저 정보 동기화
   useEffect(() => {
     if (currentUser && users[currentUser.id]) {
       const serverUser = users[currentUser.id];
-      // 무한 루프 방지를 위해 값이 다를 때만 업데이트
       if (JSON.stringify(serverUser) !== JSON.stringify(currentUser)) {
         setCurrentUser(serverUser);
       }
@@ -50,17 +59,20 @@ const App: React.FC = () => {
   }, [users, currentUser]);
 
   const handleLogin = async (user: User, isNew: boolean = false) => {
-    const updatedUser = { 
+    const updatedUser: User = { 
       ...user, 
       lastLogin: Date.now(), 
-      environment: /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'Mobile' : 'PC' as any 
+      environment: /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'Mobile' : 'PC' 
     };
+    
+    // DB 저장 (네트워크 공유)
     await api.saveUser(updatedUser);
     
+    // 전역 이벤트 기록
     if (isNew) {
-      await api.logEvent(`✨ 신규 유저 [${updatedUser.id}]님이 합류했습니다!`);
+      await api.logEvent(`✨ 신규 엔티티 [${updatedUser.id}] 합류`);
     } else {
-      await api.logEvent(`👋 [${updatedUser.nick || updatedUser.id}]님이 접속했습니다.`);
+      await api.logEvent(`👋 [${updatedUser.nick || updatedUser.id}] 세션 연결됨`);
     }
 
     setCurrentUser(updatedUser);
@@ -74,6 +86,8 @@ const App: React.FC = () => {
 
   const updateUser = useCallback(async (updatedUser: User) => {
     await api.saveUser(updatedUser);
+    // 로컬 상태 즉시 반영 (반응성 향상)
+    setUsers(prev => ({ ...prev, [updatedUser.id]: updatedUser }));
   }, []);
 
   const deleteUser = useCallback(async (userId: string) => {
@@ -90,9 +104,15 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
-        <div className="text-yellow-500 flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-black italic tracking-tighter">ESTABLISHING P2P CLOUD...</p>
+        <div className="text-yellow-500 flex flex-col items-center gap-6">
+          <div className="relative w-16 h-16">
+            <div className="absolute inset-0 border-4 border-yellow-500/20 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-black italic tracking-tighter animate-pulse">SYNCING WITH GLOBAL PEERS</p>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-2">P2P Cloud Mesh Network Connecting...</p>
+          </div>
         </div>
       </div>
     );
