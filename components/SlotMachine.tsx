@@ -9,18 +9,17 @@ interface SlotMachineProps {
 }
 
 const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
-  // 릴은 항상 5개로 고정
   const [reels, setReels] = useState(['7️⃣', '7️⃣', '7️⃣', '7️⃣', '7️⃣']);
   const [betAmount, setBetAmount] = useState<number>(100000);
   const [isSpinning, setIsSpinning] = useState(false);
-  // 개별 릴의 회전 상태 관리
   const [spinningReels, setSpinningReels] = useState<boolean[]>([false, false, false, false, false]);
   const [gameLog, setGameLog] = useState<{ msg: string; color: string }>({ msg: '배팅 금액을 정하고 레버를 당기세요!', color: 'text-zinc-400' });
-  const [prophecy, setProphecy] = useState<string>('운세를 읽어오는 중...');
+  const [prophecy, setProphecy] = useState<string>('운명의 한 마디를 불러오는 중...');
   const [isAIThinking, setIsAIThinking] = useState(false);
 
   const fetchProphecy = async () => {
     setIsAIThinking(true);
+    // 실제로는 로컬 함수이지만 비동기 인터페이스를 유지하여 코드를 최소한으로 수정합니다.
     const tip = await getAILuckProphecy(user.nick || user.id, user.balance, reels.join(','));
     setProphecy(tip);
     setIsAIThinking(false);
@@ -42,7 +41,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
 
     const intervals: any[] = [];
 
-    // 애니메이션 단계: 모든 릴에 대해 인터벌 시작
     [0, 1, 2, 3, 4].forEach((idx) => {
       const interval = setInterval(() => {
         setReels(prev => {
@@ -54,13 +52,11 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
       intervals.push(interval);
     });
 
-    // 결과 고정 단계: 앞에서부터 하나씩 멈춤
     const finalResults: string[] = [];
     for (let i = 0; i < 5; i++) {
       await new Promise(resolve => setTimeout(resolve, 800 + i * 500));
       clearInterval(intervals[i]);
       
-      // 해당 릴만 회전 멈춤
       setSpinningReels(prev => {
         const next = [...prev];
         next[i] = false;
@@ -121,13 +117,13 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
 
   return (
     <div className="flex flex-col gap-6 animate-fadeIn">
-      <div className="bg-zinc-800/80 rounded-2xl p-4 border border-yellow-500/20 shadow-lg">
+      <div className="bg-zinc-800/80 rounded-2xl p-4 border border-yellow-500/20 shadow-lg min-h-[100px] flex flex-col justify-center">
         <div className="flex items-center gap-2 mb-2">
-          <i className="fas fa-magic text-yellow-400 text-sm"></i>
-          <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">오늘의 AI 슬롯 운세</span>
+          <i className="fas fa-quote-left text-yellow-400 text-sm"></i>
+          <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">오늘의 애니메이션 운세</span>
         </div>
         <p className={`text-sm italic font-medium leading-relaxed ${isAIThinking ? 'animate-pulse opacity-50' : ''}`}>
-          "{prophecy}"
+          {prophecy}
         </p>
       </div>
 
