@@ -1,92 +1,80 @@
 
 import Gun from 'gun';
-import { User, Message, SharedMedia, ConnectionStatus } from '../types';
+import { User, Message, SharedMedia } from '../types';
 
 /**
- * 비교적 안정적인 최신 공용/커뮤니티 피어 리스트
+ * 2025년 기준 비교적 가동률이 높은 Gun.js 릴레이 피어 리스트
+ * 404 에러가 뜨더라도 WebSocket(wss)은 작동하는 경우가 많으므로 직접 연결합니다.
  */
-const POTENTIAL_PEERS = [
+const PEER_LIST = [
   'https://gun-manhattan.herokuapp.com/gun',
-  'https://gun-us.herokuapp.com/gun',
   'https://gunjs.herokuapp.com/gun',
+  'https://gundb.com/gun',
+  'https://gun-us.herokuapp.com/gun',
   'https://gun-ams1.marda.io/gun',
-  'https://gun-sjc1.marda.io/gun',
   'https://gundb-relay.up.railway.app/gun'
 ];
 
 let gunInstance: any = null;
+let connectedPeers: Set<string> = new Set();
+let statusCallback: ((count: number) => void) | null = null;
 
 class ApiService {
-  private activePeers: string[] = [];
-  private dbName = 'lucky-strike-v104-secure';
+  private dbName = 'lucky-strike-v105-mesh';
 
   /**
-   * 피어들의 생존 여부를 HTTP GET으로 먼저 체크합니다.
+   * Gun 인스턴스 초기화 및 이벤트 바인딩
    */
-  async checkPeers(): Promise<string[]> {
+  async init(): Promise<void> {
+    if (gunInstance) return;
+
+    // 환경 변수에 사용자 정의 피어가 있다면 추가
     const customPeers = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GUN_PEERS) 
       ? process.env.NEXT_PUBLIC_GUN_PEERS.split(',') 
       : [];
     
-    const allCandidates = [...new Set([...customPeers, ...POTENTIAL_PEERS])];
-    const available: string[] = [];
+    const finalPeers = [...new Set([...customPeers, ...PEER_LIST])];
 
-    await Promise.all(
-      allCandidates.map(async (url) => {
-        try {
-          // timeout 2초 설정으로 빠른 필터링
-          const controller = new AbortController();
-          const id = setTimeout(() => controller.abort(), 2000);
-          
-          const response = await fetch(url.replace('/gun', ''), { 
-            method: 'GET', 
-            signal: controller.signal,
-            mode: 'no-cors' // 대부분의 릴레이는 CORS가 막혀있을 수 있어 no-cors로 생존만 확인
-          });
-          
-          available.push(url);
-          clearTimeout(id);
-        } catch (e) {
-          console.warn(`⚠️ Peer Offline: ${url}`);
-        }
-      })
-    );
+    gunInstance = Gun({
+      peers: finalPeers,
+      localStorage: true,
+      radisk: true,
+      retry: 1000 // 재연결 시도 간격
+    });
 
-    this.activePeers = available;
-    return available;
+    // 실제 연결된 피어 모니터링
+    gunInstance.on('hi', (peer: any) => {
+      console.log('✅ Peer Connected:', peer.url);
+      connectedPeers.add(peer.url);
+      this.notifyStatus();
+    });
+
+    gunInstance.on('bye', (peer: any) => {
+      console.log('❌ Peer Disconnected:', peer.url);
+      connectedPeers.delete(peer.url);
+      this.notifyStatus();
+    });
+  }
+
+  private notifyStatus() {
+    if (statusCallback) {
+      statusCallback(connectedPeers.size);
+    }
   }
 
   /**
-   * Gun 인스턴스를 안전하게 초기화합니다.
+   * 연결된 피어 수 구독
    */
-  async init(): Promise<ConnectionStatus> {
-    const peers = await this.checkPeers();
-    
-    // 이미 인스턴스가 있다면 피어만 추가
-    if (!gunInstance) {
-      gunInstance = Gun({
-        peers: peers,
-        localStorage: true,
-        radisk: true
-      });
-    } else {
-      // 동적으로 살아있는 피어 추가
-      peers.forEach(p => gunInstance.opt({ peers: [p] }));
-    }
-
-    return {
-      connected: peers.length > 0,
-      activePeers: peers,
-      isLocalOnly: peers.length === 0
-    };
+  onConnectionChange(callback: (count: number) => void) {
+    statusCallback = callback;
+    callback(connectedPeers.size);
   }
 
   private get db() {
-    if (!gunInstance) throw new Error("Gun not initialized. Call init() first.");
+    if (!gunInstance) this.init();
     return gunInstance.get(this.dbName);
   }
 
-  // --- 데이터 노드 및 메서드 ---
   private get nodes() {
     return {
       users: this.db.get('users'),
@@ -96,6 +84,7 @@ class ApiService {
     };
   }
 
+  // --- 기존 API 메서드 유지 ---
   subscribeUsers(callback: (users: Record<string, User>) => void) {
     this.nodes.users.map().on((data: any, id: string) => {
       if (data) {

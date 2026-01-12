@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { User, DEFAULT_PROFILE_IMG } from '../types';
+import { api } from '../services/apiService';
 
 interface LayoutProps {
   user: User;
@@ -11,6 +12,13 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ user }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [peerCount, setPeerCount] = useState(0);
+
+  useEffect(() => {
+    api.onConnectionChange((count) => {
+      setPeerCount(count);
+    });
+  }, []);
 
   const navItems = [
     { path: '/', label: '게임', icon: 'fa-gamepad' },
@@ -30,8 +38,10 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
         <div className="flex flex-col">
           <h1 className="text-lg font-black text-yellow-400 tracking-tighter italic leading-none">🎰 럭키 스트라이크</h1>
           <div className="flex items-center gap-1 mt-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-[7px] font-black text-green-500 uppercase tracking-widest">Live Global Mesh</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${peerCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-orange-500'}`}></div>
+            <span className={`text-[7px] font-black uppercase tracking-widest ${peerCount > 0 ? 'text-green-500' : 'text-orange-500'}`}>
+              {peerCount > 0 ? `Live Mesh (${peerCount} Peers)` : 'Local Mesh Only'}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-3">

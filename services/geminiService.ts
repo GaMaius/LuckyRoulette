@@ -1,8 +1,12 @@
+import { GoogleGenAI } from "@google/genai";
 
 /**
- * 이 서비스는 더 이상 외부 AI(Gemini)를 호출하지 않으며
- * 로컬에 정의된 애니메이션 명대사 데이터베이스에서 운세를 제공합니다.
+ * 이 서비스는 Gemini API를 사용하여 사용자에게 
+ * 애니메이션 스타일의 운세 명대사를 제공합니다.
  */
+
+// Gemini API 클라이언트 초기화 (named parameter 사용)
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const ANIME_FORTUNES = [
   // 강철의 연금술사
@@ -42,14 +46,33 @@ const ANIME_FORTUNES = [
 ];
 
 export const getAILuckProphecy = async (username: string, balance: number, lastResult?: string) => {
-  // 랜덤 지연시간을 주어 마치 서버에서 가져오는 듯한 효과만 연출합니다.
-  await new Promise(r => setTimeout(r, 200));
-  
-  const randomIndex = Math.floor(Math.random() * ANIME_FORTUNES.length);
-  const fortune = ANIME_FORTUNES[randomIndex];
-  
-  const prefix = `[${fortune.anime}] `;
-  const suffix = fortune.character ? ` - ${fortune.character}` : "";
-  
-  return `${prefix}${fortune.quote}${suffix}`;
+  try {
+    // Gemini 3 Flash 모델을 사용하여 운세 생성 (기본 텍스트 작업에 최적화)
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `당신은 슬롯머신 게임 "럭키 스트라이크"의 세계관을 가진 애니메이션 오타쿠 점술가입니다.
+사용자 이름: ${username}
+현재 자산: ${balance}원
+마지막 슬롯 결과: ${lastResult || '새로운 시작'}
+
+위 상황을 바탕으로 사용자에게 영감을 주거나 행운을 빌어주는 애니메이션 스타일의 짧은 명대사를 한국어로 생성하세요.
+반드시 유명 애니메이션의 대사 형식을 유지해야 합니다.
+출력 형식: [애니메이션 제목] "명대사" - 캐릭터 이름`,
+    });
+
+    const prophecy = response.text;
+    if (prophecy) return prophecy.trim();
+    throw new Error("Empty AI response");
+  } catch (error) {
+    console.error("Gemini Prophecy API Error:", error);
+    
+    // API 호출 실패 시 로컬 데이터베이스에서 폴백
+    const randomIndex = Math.floor(Math.random() * ANIME_FORTUNES.length);
+    const fortune = ANIME_FORTUNES[randomIndex];
+    
+    const prefix = `[${fortune.anime}] `;
+    const suffix = fortune.character ? ` - ${fortune.character}` : "";
+    
+    return `${prefix}${fortune.quote}${suffix}`;
+  }
 };
