@@ -3,16 +3,12 @@ import Gun from 'gun';
 import { User, Message, SharedMedia } from '../types';
 
 /**
- * 2025년 기준 비교적 가동률이 높은 Gun.js 릴레이 피어 리스트
- * 404 에러가 뜨더라도 WebSocket(wss)은 작동하는 경우가 많으므로 직접 연결합니다.
+ * 기본 공용 릴레이 피어 리스트
  */
-const PEER_LIST = [
+const PUBLIC_PEERS = [
   'https://gun-manhattan.herokuapp.com/gun',
   'https://gunjs.herokuapp.com/gun',
-  'https://gundb.com/gun',
-  'https://gun-us.herokuapp.com/gun',
-  'https://gun-ams1.marda.io/gun',
-  'https://gundb-relay.up.railway.app/gun'
+  'https://gundb.com/gun'
 ];
 
 let gunInstance: any = null;
@@ -22,27 +18,27 @@ let statusCallback: ((count: number) => void) | null = null;
 class ApiService {
   private dbName = 'lucky-strike-v105-mesh';
 
-  /**
-   * Gun 인스턴스 초기화 및 이벤트 바인딩
-   */
   async init(): Promise<void> {
     if (gunInstance) return;
 
-    // 환경 변수에 사용자 정의 피어가 있다면 추가
-    const customPeers = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GUN_PEERS) 
+    // 1. 전용 서버 주소 확인 (Vercel Environment Variables에서 설정한 값)
+    // 브라우저 환경에서는 process.env 대신 글로벌 변수나 인젝션된 값을 참조할 수 있도록 함
+    const envPeers = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GUN_PEERS) 
       ? process.env.NEXT_PUBLIC_GUN_PEERS.split(',') 
       : [];
     
-    const finalPeers = [...new Set([...customPeers, ...PEER_LIST])];
+    // 2. 전용 서버를 리스트의 맨 앞에 두어 우선순위 부여
+    const finalPeers = [...new Set([...envPeers, ...PUBLIC_PEERS])];
+
+    console.log('📡 Initializing Gun with Peers:', finalPeers);
 
     gunInstance = Gun({
       peers: finalPeers,
       localStorage: true,
       radisk: true,
-      retry: 1000 // 재연결 시도 간격
+      retry: 2000
     });
 
-    // 실제 연결된 피어 모니터링
     gunInstance.on('hi', (peer: any) => {
       console.log('✅ Peer Connected:', peer.url);
       connectedPeers.add(peer.url);
@@ -62,12 +58,9 @@ class ApiService {
     }
   }
 
-  /**
-   * 연결된 피어 수 구독
-   */
   onConnectionChange(callback: (count: number) => void) {
     statusCallback = callback;
-    callback(connectedPeers.size);
+    if (gunInstance) callback(connectedPeers.size);
   }
 
   private get db() {
@@ -84,7 +77,6 @@ class ApiService {
     };
   }
 
-  // --- 기존 API 메서드 유지 ---
   subscribeUsers(callback: (users: Record<string, User>) => void) {
     this.nodes.users.map().on((data: any, id: string) => {
       if (data) {
