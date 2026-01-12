@@ -1,4 +1,9 @@
 
+/**
+ * 이 서비스는 더 이상 외부 AI(Gemini)를 호출하지 않으며
+ * 로컬에 정의된 애니메이션 명대사 데이터베이스에서 운세를 제공합니다.
+ */
+
 const ANIME_FORTUNES = [
   // 강철의 연금술사
   { anime: "강철의 연금술사", quote: "사람은 무언가의 희생 없이는 아무것도 얻을 수 없다. 무언가를 얻기 위해서는 동등한 대가가 필요하다.", character: "에드워드 엘릭" },
@@ -37,7 +42,9 @@ const ANIME_FORTUNES = [
 ];
 
 export const getAILuckProphecy = async (username: string, balance: number, lastResult?: string) => {
-  // 이제 외부 API 호출 없이 로컬 배열에서 랜덤하게 선택합니다.
+  // 랜덤 지연시간을 주어 마치 서버에서 가져오는 듯한 효과만 연출합니다.
+  await new Promise(r => setTimeout(r, 200));
+  
   const randomIndex = Math.floor(Math.random() * ANIME_FORTUNES.length);
   const fortune = ANIME_FORTUNES[randomIndex];
   

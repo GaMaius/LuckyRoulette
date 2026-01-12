@@ -19,7 +19,6 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
     { path: '/profile', label: '내 정보', icon: 'fa-user' },
   ];
 
-  // 가장 오른쪽에 관리자 여부에 따라 다른 메뉴 추가
   if (user.isAdmin) {
     navItems.push({ path: '/admin', label: '관리', icon: 'fa-tools' });
   } else {
@@ -30,15 +29,21 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
     <div className="flex flex-col flex-1 h-screen overflow-hidden">
       {/* 상단 헤더 */}
       <header className="h-16 bg-zinc-800/80 backdrop-blur-md border-b border-zinc-700 flex items-center justify-between px-5 sticky top-0 z-50">
-        <h1 className="text-xl font-black text-yellow-400 tracking-tighter italic">🎰 럭키 스트라이크</h1>
+        <div className="flex flex-col">
+          <h1 className="text-lg font-black text-yellow-400 tracking-tighter italic leading-none">🎰 럭키 스트라이크</h1>
+          <div className="flex items-center gap-1 mt-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-[7px] font-black text-green-500 uppercase tracking-widest">Live Cloud Sync</span>
+          </div>
+        </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-[9px] text-zinc-400 uppercase font-bold">내 자산</p>
+            <p className="text-[9px] text-zinc-400 uppercase font-bold">자산</p>
             <p className="text-sm font-black text-green-400">₩{user.balance.toLocaleString()}</p>
           </div>
           <button 
             onClick={() => navigate('/profile')}
-            className="w-10 h-10 rounded-full border-2 border-yellow-500 overflow-hidden bg-zinc-700"
+            className="w-10 h-10 rounded-full border-2 border-yellow-500 overflow-hidden bg-zinc-700 shadow-lg"
           >
             <img 
               src={user.img || DEFAULT_PROFILE_IMG} 
@@ -58,27 +63,19 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
       <nav className="h-20 bg-zinc-800/90 backdrop-blur-lg border-t border-zinc-700 fixed bottom-0 left-0 right-0 max-w-md mx-auto flex items-center justify-around px-2 z-50">
         {navItems.map((item) => {
           const isHome = item.path === '/';
-          const isChat = item.path === '/chat' || item.path === '/inquiry';
-          
-          let isActive = false;
-          if (isHome) {
-            isActive = location.pathname === '/';
-          } else if (item.path === '/inquiry') {
-            isActive = location.pathname === '/inquiry' || location.pathname === '/chat/admin';
-          } else {
-            isActive = location.pathname.startsWith(item.path);
-          }
+          let isActive = isHome ? location.pathname === '/' : location.pathname.startsWith(item.path);
+          if (item.path === '/inquiry') isActive = location.pathname === '/chat/admin';
 
           return (
             <Link
               key={item.path}
               to={item.path}
               className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all ${
-                isActive ? 'text-yellow-400' : 'text-zinc-500'
+                isActive ? 'text-yellow-400 scale-110' : 'text-zinc-500'
               }`}
             >
               <i className={`fas ${item.icon} text-lg`}></i>
-              <span className="text-[11px] font-bold">{item.label}</span>
+              <span className="text-[10px] font-bold">{item.label}</span>
               {isActive && <div className="w-1 h-1 rounded-full bg-yellow-400"></div>}
             </Link>
           );
