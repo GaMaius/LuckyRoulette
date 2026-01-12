@@ -16,7 +16,7 @@ export interface SharedMedia {
   id: string;
   uploaderId: string;
   uploaderNick: string;
-  data: string; // Base64 이미지 데이터
+  data: string;
   timestamp: number;
   type: 'image' | 'video';
 }
@@ -30,6 +30,12 @@ export interface Message {
   timestamp: number;
   type: 'global' | 'direct';
   targetId?: string;
+}
+
+export interface ConnectionStatus {
+  connected: boolean;
+  activePeers: string[];
+  isLocalOnly: boolean;
 }
 
 export type ViewType = 'login' | 'signup' | 'game' | 'rank' | 'chat' | 'profile' | 'admin' | 'shared-gallery';

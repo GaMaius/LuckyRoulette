@@ -1,53 +1,105 @@
 
 import Gun from 'gun';
-import { User, Message, SharedMedia } from '../types';
+import { User, Message, SharedMedia, ConnectionStatus } from '../types';
 
 /**
- * Vercel 서버리스 환경을 위한 피어 구성
- * 1. 로컬 개발 환경: localhost:8765
- * 2. 배포 환경: 환경 변수(NEXT_PUBLIC_GUN_PEERS) 또는 공용 커뮤니티 서버
+ * 비교적 안정적인 최신 공용/커뮤니티 피어 리스트
  */
-const getPeers = () => {
-  // 개발 모드인 경우 로컬 서버를 우선순위에 둡니다.
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return ['http://localhost:8765/gun'];
-  }
+const POTENTIAL_PEERS = [
+  'https://gun-manhattan.herokuapp.com/gun',
+  'https://gun-us.herokuapp.com/gun',
+  'https://gunjs.herokuapp.com/gun',
+  'https://gun-ams1.marda.io/gun',
+  'https://gun-sjc1.marda.io/gun',
+  'https://gundb-relay.up.railway.app/gun'
+];
 
-  // Vercel 환경 변수에서 피어를 가져오거나 기본 공용 피어를 사용합니다.
-  // 주의: Vercel(HTTPS) 환경에서는 반드시 https 피어만 사용해야 Mixed Content 에러가 발생하지 않습니다.
-  const envPeers = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GUN_PEERS) 
-    ? process.env.NEXT_PUBLIC_GUN_PEERS.split(',') 
-    : [
-        'https://gun-manhattan.herokuapp.com/gun',
-        'https://gun-us.herokuapp.com/gun',
-        'https://gunjs.herokuapp.com/gun',
-        'https://gundb-relay.up.railway.app/gun' // 추가적인 공용 피어
-      ];
-
-  return envPeers;
-};
-
-const gun = Gun({
-  peers: getPeers(),
-  localStorage: true, // 브라우저 IndexedDB/LocalStorage에 데이터 캐싱
-  radisk: true        // 성능 최적화
-});
-
-const DB_NAME = 'lucky-strike-global-v103-prod';
-const db = gun.get(DB_NAME);
-
-// 데이터 노드 정의
-const usersNode = db.get('users');
-const messagesNode = db.get('messages');
-const eventsNode = db.get('events');
-const sharedGalleryNode = db.get('shared-gallery');
+let gunInstance: any = null;
 
 class ApiService {
-  // --- 사용자 관련 ---
+  private activePeers: string[] = [];
+  private dbName = 'lucky-strike-v104-secure';
+
+  /**
+   * 피어들의 생존 여부를 HTTP GET으로 먼저 체크합니다.
+   */
+  async checkPeers(): Promise<string[]> {
+    const customPeers = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_GUN_PEERS) 
+      ? process.env.NEXT_PUBLIC_GUN_PEERS.split(',') 
+      : [];
+    
+    const allCandidates = [...new Set([...customPeers, ...POTENTIAL_PEERS])];
+    const available: string[] = [];
+
+    await Promise.all(
+      allCandidates.map(async (url) => {
+        try {
+          // timeout 2초 설정으로 빠른 필터링
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), 2000);
+          
+          const response = await fetch(url.replace('/gun', ''), { 
+            method: 'GET', 
+            signal: controller.signal,
+            mode: 'no-cors' // 대부분의 릴레이는 CORS가 막혀있을 수 있어 no-cors로 생존만 확인
+          });
+          
+          available.push(url);
+          clearTimeout(id);
+        } catch (e) {
+          console.warn(`⚠️ Peer Offline: ${url}`);
+        }
+      })
+    );
+
+    this.activePeers = available;
+    return available;
+  }
+
+  /**
+   * Gun 인스턴스를 안전하게 초기화합니다.
+   */
+  async init(): Promise<ConnectionStatus> {
+    const peers = await this.checkPeers();
+    
+    // 이미 인스턴스가 있다면 피어만 추가
+    if (!gunInstance) {
+      gunInstance = Gun({
+        peers: peers,
+        localStorage: true,
+        radisk: true
+      });
+    } else {
+      // 동적으로 살아있는 피어 추가
+      peers.forEach(p => gunInstance.opt({ peers: [p] }));
+    }
+
+    return {
+      connected: peers.length > 0,
+      activePeers: peers,
+      isLocalOnly: peers.length === 0
+    };
+  }
+
+  private get db() {
+    if (!gunInstance) throw new Error("Gun not initialized. Call init() first.");
+    return gunInstance.get(this.dbName);
+  }
+
+  // --- 데이터 노드 및 메서드 ---
+  private get nodes() {
+    return {
+      users: this.db.get('users'),
+      messages: this.db.get('messages'),
+      events: this.db.get('events'),
+      sharedGallery: this.db.get('shared-gallery')
+    };
+  }
+
   subscribeUsers(callback: (users: Record<string, User>) => void) {
-    usersNode.map().on((data, id) => {
+    this.nodes.users.map().on((data: any, id: string) => {
       if (data) {
-        const { _, ...user } = data as any;
+        const { _, ...user } = data;
         if (user && user.id) callback({ [id]: user as User });
       }
     });
@@ -56,17 +108,16 @@ class ApiService {
   async saveUser(user: User): Promise<void> {
     const cleanUser = JSON.parse(JSON.stringify(user));
     return new Promise((resolve) => {
-      usersNode.get(user.id).put(cleanUser, (ack: any) => {
+      this.nodes.users.get(user.id).put(cleanUser, (ack: any) => {
         if (!ack.err) resolve();
       });
     });
   }
 
-  // --- 공유 갤러리 ---
   subscribeSharedGallery(callback: (media: SharedMedia) => void) {
-    sharedGalleryNode.map().on((data) => {
+    this.nodes.sharedGallery.map().on((data: any) => {
       if (data && data.id) {
-        const { _, ...media } = data as any;
+        const { _, ...media } = data;
         callback(media as SharedMedia);
       }
     });
@@ -74,16 +125,13 @@ class ApiService {
 
   async uploadToSharedGallery(media: SharedMedia): Promise<void> {
     const cleanMedia = JSON.parse(JSON.stringify(media));
-    return new Promise((resolve) => {
-      sharedGalleryNode.get(media.id).put(cleanMedia, () => resolve());
-    });
+    this.nodes.sharedGallery.get(media.id).put(cleanMedia);
   }
 
-  // --- 채팅 ---
   subscribeMessages(callback: (msg: Message) => void) {
-    messagesNode.map().on((data) => {
+    this.nodes.messages.map().on((data: any) => {
       if (data && data.id) {
-        const { _, ...msg } = data as any;
+        const { _, ...msg } = data;
         callback(msg as Message);
       }
     });
@@ -91,22 +139,21 @@ class ApiService {
 
   async sendMessage(msg: Message): Promise<void> {
     const cleanMsg = JSON.parse(JSON.stringify(msg));
-    messagesNode.get(msg.id).put(cleanMsg);
+    this.nodes.messages.get(msg.id).put(cleanMsg);
   }
 
-  // --- 실시간 이벤트 ---
   subscribeEvents(callback: (event: string) => void) {
-    eventsNode.map().on((data) => {
+    this.nodes.events.map().on((data: any) => {
       if (typeof data === 'string') callback(data);
     });
   }
 
   async logEvent(message: string): Promise<void> {
-    eventsNode.set(message);
+    this.nodes.events.set(message);
   }
 
   async deleteUser(userId: string): Promise<void> {
-    usersNode.get(userId).put(null as any);
+    this.nodes.users.get(userId).put(null as any);
   }
 }
 
