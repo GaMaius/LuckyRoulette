@@ -7,6 +7,7 @@ export interface User {
   bio: string;
   img: string;
   isAdmin?: boolean;
+  lastLogin?: number; // 마지막 접속 시간 (타임스탬프)
 }
 
 export type ViewType = 'login' | 'signup' | 'game' | 'rank' | 'profile' | 'admin';

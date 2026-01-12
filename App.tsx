@@ -17,12 +17,21 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const handleLogin = (user: User) => {
-    setCurrentUser(user);
+    const now = Date.now();
+    const updatedUser = { ...user, lastLogin: now };
+    
+    setUsers(prev => ({
+      ...prev,
+      [user.id]: updatedUser
+    }));
+    
+    setCurrentUser(updatedUser);
   };
 
   const handleLogout = useCallback(() => {
-    if (window.confirm('로그아웃 하시겠습니까?')) {
+    if (window.confirm('정말로 로그아웃 하시겠습니까?')) {
       setCurrentUser(null);
+      // 세션 상태가 null이 되면 Routes의 Navigate에 의해 /login으로 자동 이동합니다.
     }
   }, []);
 
@@ -31,7 +40,7 @@ const App: React.FC = () => {
       ...prev,
       [updatedUser.id]: updatedUser
     }));
-    // 현재 로그인한 사용자와 일치하면 상태 업데이트
+    
     if (currentUser && currentUser.id === updatedUser.id) {
       setCurrentUser(updatedUser);
     }
@@ -44,7 +53,6 @@ const App: React.FC = () => {
       return newUsers;
     });
     
-    // 삭제하려는 대상이 나 자신일 경우 로그아웃 처리
     if (currentUser?.id === userId) {
       setCurrentUser(null);
     }
@@ -59,7 +67,7 @@ const App: React.FC = () => {
               <>
                 <Route path="/login" element={<Auth mode="login" onLogin={handleLogin} users={users} setUsers={setUsers} />} />
                 <Route path="/signup" element={<Auth mode="signup" onLogin={handleLogin} users={users} setUsers={setUsers} />} />
-                <Route path="*" element={<Navigate to="/login" />} />
+                <Route path="*" element={<Navigate to="/login" replace />} />
               </>
             ) : (
               <Route path="/" element={<Layout user={currentUser} onLogout={handleLogout} />}>
@@ -70,7 +78,7 @@ const App: React.FC = () => {
                 {currentUser.isAdmin && (
                   <Route path="admin" element={<Admin users={users} onUpdateUser={updateUser} onDeleteUser={deleteUser} />} />
                 )}
-                <Route path="*" element={<Navigate to="/" />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             )}
           </Routes>

@@ -9,9 +9,12 @@ interface SlotMachineProps {
 }
 
 const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
+  // 릴은 항상 5개로 고정
   const [reels, setReels] = useState(['7️⃣', '7️⃣', '7️⃣', '7️⃣', '7️⃣']);
   const [betAmount, setBetAmount] = useState<number>(100000);
   const [isSpinning, setIsSpinning] = useState(false);
+  // 개별 릴의 회전 상태 관리
+  const [spinningReels, setSpinningReels] = useState<boolean[]>([false, false, false, false, false]);
   const [gameLog, setGameLog] = useState<{ msg: string; color: string }>({ msg: '배팅 금액을 정하고 레버를 당기세요!', color: 'text-zinc-400' });
   const [prophecy, setProphecy] = useState<string>('운세를 읽어오는 중...');
   const [isAIThinking, setIsAIThinking] = useState(false);
@@ -34,27 +37,36 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
     if (betAmount > user.balance) return alert('잔액이 부족합니다.');
 
     setIsSpinning(true);
-    setGameLog({ msg: '결과를 기다리는 중...', color: 'text-yellow-500' });
+    setSpinningReels([true, true, true, true, true]);
+    setGameLog({ msg: '릴이 돌아가고 있습니다...', color: 'text-yellow-500' });
 
     const intervals: any[] = [];
 
-    // 애니메이션 단계
-    SLOT_SYMBOLS.forEach((_, idx) => {
+    // 애니메이션 단계: 모든 릴에 대해 인터벌 시작
+    [0, 1, 2, 3, 4].forEach((idx) => {
       const interval = setInterval(() => {
         setReels(prev => {
           const next = [...prev];
           next[idx] = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
           return next;
         });
-      }, 100);
+      }, 80);
       intervals.push(interval);
     });
 
-    // 결과 고정 단계
+    // 결과 고정 단계: 앞에서부터 하나씩 멈춤
     const finalResults: string[] = [];
     for (let i = 0; i < 5; i++) {
-      await new Promise(resolve => setTimeout(resolve, 600 + i * 400));
+      await new Promise(resolve => setTimeout(resolve, 800 + i * 500));
       clearInterval(intervals[i]);
+      
+      // 해당 릴만 회전 멈춤
+      setSpinningReels(prev => {
+        const next = [...prev];
+        next[i] = false;
+        return next;
+      });
+
       const symbol = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
       finalResults[i] = symbol;
       setReels(prev => {
@@ -109,7 +121,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
 
   return (
     <div className="flex flex-col gap-6 animate-fadeIn">
-      {/* AI 운세 영역 */}
       <div className="bg-zinc-800/80 rounded-2xl p-4 border border-yellow-500/20 shadow-lg">
         <div className="flex items-center gap-2 mb-2">
           <i className="fas fa-magic text-yellow-400 text-sm"></i>
@@ -120,14 +131,13 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
         </p>
       </div>
 
-      {/* 슬롯 머신 본체 */}
       <div className="bg-zinc-800 border-4 border-yellow-500 rounded-3xl p-6 shadow-2xl overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400/30"></div>
         <div className="flex justify-center gap-2 mb-6 h-20">
           {reels.map((symbol, i) => (
             <div 
               key={i} 
-              className={`w-14 h-20 bg-zinc-100 rounded-lg flex items-center justify-center text-3xl shadow-inner border-2 border-zinc-400 ${isSpinning ? 'reel-spin' : ''}`}
+              className={`w-14 h-20 bg-zinc-100 rounded-lg flex items-center justify-center text-3xl shadow-inner border-2 border-zinc-400 ${spinningReels[i] ? 'reel-spin' : ''}`}
             >
               {symbol}
             </div>
@@ -179,25 +189,6 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
           >
             {isSpinning ? '회전 중...' : '레버 당기기!'}
           </button>
-        </div>
-      </div>
-
-      {/* 배당표 */}
-      <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl p-4">
-        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3">당첨 배당률 (5개 일치 시)</h3>
-        <div className="grid grid-cols-2 gap-3 text-xs font-bold">
-          <div className="flex justify-between p-2 bg-black/30 rounded border border-zinc-800">
-            <span>7️⃣ 7️⃣ 7️⃣ 7️⃣ 7️⃣</span> <span className="text-yellow-500">x10</span>
-          </div>
-          <div className="flex justify-between p-2 bg-black/30 rounded border border-zinc-800">
-            <span>💎 💎 💎 💎 💎</span> <span className="text-blue-500">x5</span>
-          </div>
-          <div className="flex justify-between p-2 bg-black/30 rounded border border-zinc-800">
-            <span>나머지 심볼 3개+</span> <span className="text-green-500">x2</span>
-          </div>
-          <div className="flex justify-between p-2 bg-black/30 rounded border border-zinc-800">
-            <span>그 외</span> <span className="text-red-500">꽝</span>
-          </div>
         </div>
       </div>
     </div>

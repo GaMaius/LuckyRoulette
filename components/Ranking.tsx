@@ -9,7 +9,11 @@ interface RankingProps {
 
 const Ranking: React.FC<RankingProps> = ({ users }) => {
   const navigate = useNavigate();
-  const sortedUsers = (Object.values(users) as User[]).sort((a, b) => b.balance - a.balance);
+  
+  // 관리자(isAdmin: true 또는 id: 'admin') 제외 필터링 후 정렬
+  const sortedUsers = (Object.values(users) as User[])
+    .filter(u => !u.isAdmin && u.id !== 'admin')
+    .sort((a, b) => b.balance - a.balance);
 
   const getRankStyle = (index: number) => {
     switch (index) {
