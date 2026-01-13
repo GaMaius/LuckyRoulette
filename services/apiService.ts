@@ -59,7 +59,6 @@ class ApiService {
     };
   }
 
-  // Gun.js는 undefined 값을 싫어하므로 유효한 값으로 치환하는 헬퍼
   private sanitize(obj: any) {
     const sanitized = { ...obj };
     Object.keys(sanitized).forEach(key => {
@@ -78,6 +77,9 @@ class ApiService {
           if (typeof user.gallery === 'string') {
             try { user.gallery = JSON.parse(user.gallery); } catch (e) { user.gallery = []; }
           }
+          if (typeof user.lastRead === 'string') {
+            try { user.lastRead = JSON.parse(user.lastRead); } catch (e) { user.lastRead = {}; }
+          }
           callback({ [id]: user as User });
         }
       }
@@ -87,7 +89,8 @@ class ApiService {
   async saveUser(user: User): Promise<void> {
     const dataToSave = this.sanitize({
       ...user,
-      gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : (user.gallery || "[]")
+      gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : (user.gallery || "[]"),
+      lastRead: user.lastRead ? JSON.stringify(user.lastRead) : "{}"
     });
     
     return new Promise((resolve, reject) => {
@@ -125,7 +128,11 @@ class ApiService {
   }
 
   async sendMessage(msg: Message): Promise<void> {
-    this.nodes.messages.get(msg.id).put(this.sanitize(msg));
+    return new Promise((resolve) => {
+      this.nodes.messages.get(msg.id).put(this.sanitize(msg), (ack: any) => {
+        resolve();
+      });
+    });
   }
 
   subscribeEvents(callback: (event: string) => void) {

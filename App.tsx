@@ -29,7 +29,7 @@ const App: React.FC = () => {
         if (isMounted) {
           setMessages(prev => {
             if (prev.find(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg].sort((a, b) => a.timestamp - b.timestamp).slice(-100);
+            return [...prev, newMsg].sort((a, b) => a.timestamp - b.timestamp).slice(-200);
           });
         }
       });
@@ -39,7 +39,6 @@ const App: React.FC = () => {
     return () => { isMounted = false; };
   }, []);
 
-  // 실시간 동기화: 서버에서 유저 데이터가 변경되면 현재 사용자 상태도 업데이트
   useEffect(() => {
     if (currentUser && users[currentUser.id]) {
       const serverUser = users[currentUser.id];
@@ -61,7 +60,6 @@ const App: React.FC = () => {
 
   const updateUser = useCallback(async (updatedUser: User) => {
     await api.saveUser(updatedUser);
-    // 상태 즉시 업데이트로 UI 반응성 확보
     setUsers(prev => ({ ...prev, [updatedUser.id]: updatedUser }));
     if (currentUser?.id === updatedUser.id) {
       setCurrentUser(updatedUser);
@@ -100,8 +98,8 @@ const App: React.FC = () => {
                 <Route index element={<SlotMachine user={currentUser} onUpdateUser={updateUser} />} />
                 <Route path="feed" element={<SharedGallery user={currentUser} />} />
                 <Route path="rank" element={<Ranking users={users} />} />
-                <Route path="chat" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={api.sendMessage.bind(api)} />} />
-                <Route path="chat/:targetId" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={api.sendMessage.bind(api)} />} />
+                <Route path="chat" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={api.sendMessage.bind(api)} onUpdateUser={updateUser} />} />
+                <Route path="chat/:targetId" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={api.sendMessage.bind(api)} onUpdateUser={updateUser} />} />
                 <Route path="profile" element={<Profile user={currentUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={() => setCurrentUser(null)} />} />
                 <Route path="profile/:id" element={<Profile user={currentUser} targetUsers={users} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={() => setCurrentUser(null)} />} />
                 {currentUser.isAdmin && (

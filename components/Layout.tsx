@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { User, DEFAULT_PROFILE_IMG } from '../types';
+import { User, Message, DEFAULT_PROFILE_IMG } from '../types';
 import { api } from '../services/apiService';
 
 interface LayoutProps {
@@ -13,18 +13,42 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [peerCount, setPeerCount] = useState(0);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   useEffect(() => {
     api.onConnectionChange((count) => {
       setPeerCount(count);
     });
+    // 실시간 메시지 구독 (배지 계산용)
+    api.subscribeMessages((newMsg) => {
+      setMessages(prev => {
+        if (prev.find(m => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+    });
   }, []);
+
+  // 안읽은 메시지 총 개수 계산
+  const unreadCount = useMemo(() => {
+    const lastRead = user.lastRead || {};
+    return messages.filter(m => {
+      if (m.senderId === user.id) return false;
+      
+      const channelId = m.type === 'global' ? 'global' : m.senderId;
+      const lastReadTime = lastRead[channelId] || 0;
+      
+      // 1:1 메시지인 경우 나에게 온 것만 계산
+      if (m.type === 'direct' && m.targetId !== user.id) return false;
+      
+      return m.timestamp > lastReadTime;
+    }).length;
+  }, [messages, user.lastRead, user.id]);
 
   const navItems = [
     { path: '/', label: '게임', icon: 'fa-gamepad' },
     { path: '/feed', label: '피드', icon: 'fa-rss' },
     { path: '/rank', label: '랭킹', icon: 'fa-trophy' },
-    { path: '/chat', label: '채팅', icon: 'fa-comments' },
+    { path: '/chat', label: '채팅', icon: 'fa-comments', badge: unreadCount },
     { path: '/profile', label: '프로필', icon: 'fa-user' },
   ];
 
@@ -69,12 +93,17 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all ${
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all relative ${
                 isActive ? 'text-yellow-400 scale-110' : 'text-zinc-500'
               }`}
             >
               <i className={`fas ${item.icon} text-lg`}></i>
               <span className="text-[10px] font-bold">{item.label}</span>
+              {item.badge && item.badge > 0 && (
+                <div className="absolute top-2 right-4 bg-red-600 text-[8px] text-white font-black px-1.5 py-0.5 rounded-full min-w-[16px] text-center border-2 border-zinc-800">
+                  {item.badge > 99 ? '99+' : item.badge}
+                </div>
+              )}
               {isActive && <div className="w-1 h-1 rounded-full bg-yellow-400"></div>}
             </Link>
           );

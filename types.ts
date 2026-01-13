@@ -10,6 +10,7 @@ export interface User {
   isAdmin?: boolean;
   lastLogin?: number;
   environment?: 'PC' | 'Mobile';
+  lastRead?: Record<string, number>; // key: 'global' 또는 상대방 id, value: 마지막으로 읽은 timestamp
 }
 
 export interface SharedMedia {

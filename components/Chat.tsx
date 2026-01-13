@@ -1,16 +1,17 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Message, DEFAULT_PROFILE_IMG } from '../types';
 
 interface ChatProps {
   user: User;
-  usersRecord: Record<string, User>; // App.tsx에서 전달하는 이름으로 변경
+  usersRecord: Record<string, User>;
   messages: Message[];
   onSendMessage: (msg: Message) => void;
+  onUpdateUser: (updatedUser: User) => void;
 }
 
-const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage }) => {
+const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage, onUpdateUser }) => {
   const { targetId } = useParams();
   const navigate = useNavigate();
   const [inputText, setInputText] = useState('');
@@ -19,9 +20,29 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
 
   useEffect(() => {
     if (targetId) setChatType('direct');
+    else setChatType('global');
   }, [targetId]);
 
+  // 방에 입장하거나 새 메시지가 올 때 lastRead 업데이트
   useEffect(() => {
+    const channelId = chatType === 'global' ? 'global' : (targetId || '');
+    if (!channelId) return;
+
+    const currentReadTime = (user.lastRead || {})[channelId] || 0;
+    const now = Date.now();
+
+    // 0.5초 이상 차이날 때만 업데이트 (과도한 갱신 방지)
+    if (now - currentReadTime > 500) {
+      const updatedUser = {
+        ...user,
+        lastRead: {
+          ...(user.lastRead || {}),
+          [channelId]: now
+        }
+      };
+      onUpdateUser(updatedUser);
+    }
+
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
@@ -32,7 +53,7 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
     if (!inputText.trim()) return;
 
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: `msg_${Date.now()}_${user.id}`,
       senderId: user.id,
       senderNick: user.nick || user.id,
       senderImg: user.img || DEFAULT_PROFILE_IMG,
@@ -56,6 +77,17 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
   });
 
   const targetUser = targetId ? (usersRecord[targetId] || (targetId === 'admin' ? { id: 'admin', nick: '운영지원팀', img: 'https://picsum.photos/seed/admin/200/200' } : null)) : null;
+
+  // 특정 대화방의 안읽은 개수 계산 헬퍼
+  const getUnreadCount = (partnerId: string) => {
+    const lastRead = (user.lastRead || {})[partnerId] || 0;
+    return messages.filter(m => 
+      m.type === 'direct' && 
+      m.senderId === partnerId && 
+      m.targetId === user.id && 
+      m.timestamp > lastRead
+    ).length;
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-160px)] animate-fadeIn">
@@ -92,11 +124,11 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
       </div>
 
       {chatType === 'direct' && !targetId && (
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
           {!user.isAdmin && (
             <div 
               onClick={() => navigate(`/chat/admin`)}
-              className="flex items-center gap-4 bg-yellow-500/10 p-4 rounded-2xl border border-yellow-500/20 hover:bg-yellow-500/20 transition-all cursor-pointer mb-2"
+              className="flex items-center gap-4 bg-yellow-500/10 p-4 rounded-2xl border border-yellow-500/20 hover:bg-yellow-500/20 transition-all cursor-pointer mb-2 relative"
             >
               <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-black shadow-lg">
                 <i className="fas fa-headset"></i>
@@ -105,25 +137,37 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
                 <p className="text-sm font-black text-yellow-500">운영지원팀 (고객센터)</p>
                 <p className="text-[10px] text-zinc-400">문의 사항은 여기에 남겨주세요.</p>
               </div>
+              {getUnreadCount('admin') > 0 && (
+                <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full mr-2">
+                  {getUnreadCount('admin')}
+                </span>
+              )}
               <i className="fas fa-chevron-right text-yellow-500 text-xs"></i>
             </div>
           )}
 
-          {/* Fix: Cast Object.values to User array to fix unknown type issues in filter and map (lines 112-121) */}
-          {(Object.values(usersRecord) as User[]).filter(u => u.id !== user.id && !u.isAdmin).map(u => (
-            <div 
-              key={u.id}
-              onClick={() => navigate(`/chat/${u.id}`)}
-              className="flex items-center gap-4 bg-zinc-800/30 p-4 rounded-2xl border border-zinc-800 hover:bg-zinc-800 transition-all cursor-pointer"
-            >
-              <img src={u.img || DEFAULT_PROFILE_IMG} className="w-10 h-10 rounded-full object-cover border border-zinc-700 shadow-md" alt="" />
-              <div className="flex-1">
-                <p className="text-sm font-black text-white">{u.nick || u.id}</p>
-                <p className="text-[10px] text-zinc-500 truncate">{u.bio || '메시지를 보내보세요'}</p>
+          {(Object.values(usersRecord) as User[]).filter(u => u.id !== user.id && !u.isAdmin).map(u => {
+            const count = getUnreadCount(u.id);
+            return (
+              <div 
+                key={u.id}
+                onClick={() => navigate(`/chat/${u.id}`)}
+                className="flex items-center gap-4 bg-zinc-800/30 p-4 rounded-2xl border border-zinc-800 hover:bg-zinc-800 transition-all cursor-pointer relative"
+              >
+                <img src={u.img || DEFAULT_PROFILE_IMG} className="w-10 h-10 rounded-full object-cover border border-zinc-700 shadow-md" alt="" />
+                <div className="flex-1">
+                  <p className="text-sm font-black text-white">{u.nick || u.id}</p>
+                  <p className="text-[10px] text-zinc-500 truncate">{u.bio || '메시지를 보내보세요'}</p>
+                </div>
+                {count > 0 && (
+                  <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full mr-2">
+                    {count}
+                  </span>
+                )}
+                <i className="fas fa-chevron-right text-zinc-700 text-xs"></i>
               </div>
-              <i className="fas fa-chevron-right text-zinc-700 text-xs"></i>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -141,10 +185,20 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
             {filteredMessages.map((m) => {
               const isMe = m.senderId === user.id;
               const isSenderAdmin = m.senderId === 'admin';
-              const currentSender = isSenderAdmin ? { nick: '운영지원팀', img: 'https://picsum.photos/seed/admin/200/200' } : (usersRecord[m.senderId] || null);
+              const currentSender = isSenderAdmin ? { id: 'admin', nick: '운영지원팀', img: 'https://picsum.photos/seed/admin/200/200', lastRead: {} } : (usersRecord[m.senderId] || null);
               const displayImg = currentSender?.img || m.senderImg || DEFAULT_PROFILE_IMG;
               const displayNick = currentSender?.nick || m.senderNick || m.senderId;
               
+              // 상대방이 읽었는지 확인 (1:1 채팅일 때만)
+              let showOne = false;
+              if (isMe && chatType === 'direct' && targetId) {
+                const partner = usersRecord[targetId] || (targetId === 'admin' ? { lastRead: {} } : null);
+                const partnerReadTime = (partner?.lastRead || {})[user.id] || 0;
+                if (m.timestamp > partnerReadTime) {
+                  showOne = true;
+                }
+              }
+
               return (
                 <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} gap-2 animate-fadeIn`}>
                   {!isMe && (
@@ -155,20 +209,32 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
                       onClick={() => !isSenderAdmin && navigate(`/profile/${m.senderId}`)}
                     />
                   )}
-                  <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
+                  <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-0.5 relative`}>
                     {!isMe && chatType === 'global' && (
                       <span className={`text-[9px] font-black ml-1 ${isSenderAdmin ? 'text-yellow-500' : 'text-zinc-500'}`}>
                         {displayNick} {isSenderAdmin && '🛡️'}
                       </span>
                     )}
-                    <div className={`px-4 py-2 rounded-2xl text-sm font-medium shadow-sm ${
-                      isMe ? 'bg-yellow-500 text-black rounded-tr-none' : 'bg-zinc-800 text-zinc-100 rounded-tl-none border border-zinc-700/50'
-                    }`}>
-                      {m.text}
+                    <div className="flex items-end gap-1.5">
+                      {isMe && showOne && (
+                        <span className="text-[10px] font-black text-yellow-500 mb-1">1</span>
+                      )}
+                      <div className={`px-4 py-2 rounded-2xl text-sm font-medium shadow-sm ${
+                        isMe ? 'bg-yellow-500 text-black rounded-tr-none' : 'bg-zinc-800 text-zinc-100 rounded-tl-none border border-zinc-700/50'
+                      }`}>
+                        {m.text}
+                      </div>
+                      {!isMe && (
+                        <span className="text-[7px] text-zinc-600 font-bold uppercase self-end mb-1">
+                          {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[7px] text-zinc-600 font-bold px-1 uppercase">
-                      {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    {isMe && (
+                      <span className="text-[7px] text-zinc-600 font-bold uppercase px-1">
+                        {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
