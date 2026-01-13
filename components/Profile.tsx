@@ -63,7 +63,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         balance: Number(balance), 
         gallery: gallery
       };
-      // App.tsx의 onUpdateUser가 이미 api.saveUser를 호출하므로 여기서 중복 호출하지 않습니다.
       await onUpdateUser(updatedData);
       alert('설정이 성공적으로 반영되었습니다.');
     } catch (err) {
@@ -92,7 +91,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         const updatedGallery = [...gallery, ...compressedItems];
         setGallery(updatedGallery);
         
-        // 본인 프로필일 경우 첫 번째 사진을 프로필로 즉시 적용
         let newProfileImg = img;
         if (isSelf && compressedItems[0]) {
           newProfileImg = compressedItems[0];
@@ -172,6 +170,19 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
           />
         </div>
 
+        {isAdmin && (
+          <div className="bg-red-500/5 rounded-2xl p-4 border border-red-500/20 animate-slideUp">
+            <label className="text-[10px] font-black text-red-500 uppercase mb-2 block tracking-widest flex items-center gap-1">
+              <i className="fas fa-shield-alt text-[8px]"></i> 보안 비밀번호 (관리자 전용)
+            </label>
+            <input 
+              type="text" value={pw} onChange={(e) => setPw(e.target.value)}
+              className="w-full bg-black border border-red-500/20 rounded-xl py-4 px-5 font-mono font-bold text-yellow-500 focus:outline-none focus:border-red-500 transition-all"
+              placeholder="비밀번호 수정"
+            />
+          </div>
+        )}
+
         <div className="bg-zinc-800/50 rounded-2xl p-4 border border-zinc-700/30">
           <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block tracking-widest">상태 메시지</label>
           <textarea 
@@ -225,7 +236,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         </div>
       )}
 
-      {/* 이미지 확대 모달 */}
       {zoomedImg && (
         <div className="fixed inset-0 z-[500] bg-black/95 flex items-center justify-center p-4 animate-fadeIn" onClick={() => setZoomedImg(null)}>
           <div className="relative max-w-full max-h-full">
@@ -235,7 +245,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         </div>
       )}
 
-      {/* 미디어 보관함 모달 */}
       {showMediaLibrary && (
         <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 animate-fadeIn backdrop-blur-xl">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-[3rem] p-7 flex flex-col max-h-[85vh] shadow-2xl relative overflow-hidden">
@@ -251,7 +260,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
               <button onClick={() => setShowMediaLibrary(false)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 active:scale-90 transition-transform"><i className="fas fa-times"></i></button>
             </div>
 
-            {/* 업로드 버튼은 본인 혹은 관리자일 때만 노출 */}
             {canEdit && (
               <button 
                 onClick={() => fileInputRef.current?.click()}
@@ -272,7 +280,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
                     onClick={() => { if(canEdit) setImg(src); setShowMediaLibrary(false); }}
                     className="w-full h-full object-cover rounded-2xl border border-zinc-800 hover:border-yellow-500 cursor-pointer transition-all shadow-md"
                   />
-                  {/* 삭제/다운로드 버튼은 철저히 권한 제어 (본인 혹은 관리자) */}
                   {canEdit && (
                     <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
