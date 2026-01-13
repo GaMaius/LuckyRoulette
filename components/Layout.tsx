@@ -25,7 +25,7 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
     { path: '/feed', label: '피드', icon: 'fa-rss' },
     { path: '/rank', label: '랭킹', icon: 'fa-trophy' },
     { path: '/chat', label: '채팅', icon: 'fa-comments' },
-    { path: '/profile', label: '내 정보', icon: 'fa-user' },
+    { path: '/profile', label: '프로필', icon: 'fa-user' },
   ];
 
   if (user.isAdmin) {
@@ -36,24 +36,24 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
     <div className="flex flex-col flex-1 h-screen overflow-hidden">
       <header className="h-16 bg-zinc-800/80 backdrop-blur-md border-b border-zinc-700 flex items-center justify-between px-5 sticky top-0 z-50">
         <div className="flex flex-col">
-          <h1 className="text-lg font-black text-yellow-400 tracking-tighter italic leading-none">🎰 럭키 스트라이크</h1>
+          <h1 className="text-lg font-black text-yellow-400 tracking-tighter italic leading-none">🎰 LUCKY STRIKE</h1>
           <div className="flex items-center gap-1 mt-1">
             <div className={`w-1.5 h-1.5 rounded-full ${peerCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-orange-500'}`}></div>
             <span className={`text-[7px] font-black uppercase tracking-widest ${peerCount > 0 ? 'text-green-500' : 'text-orange-500'}`}>
-              {peerCount > 0 ? `Live Mesh (${peerCount} Peers)` : 'Local Mesh Only'}
+              {peerCount > 0 ? `실시간 보안망 (${peerCount}명)` : '오프라인 모드'}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-[9px] text-zinc-400 uppercase font-bold">자산</p>
+            <p className="text-[9px] text-zinc-400 uppercase font-bold">보유 자산</p>
             <p className="text-sm font-black text-green-400">₩{user.balance.toLocaleString()}</p>
           </div>
           <button 
             onClick={() => navigate('/profile')}
             className="w-10 h-10 rounded-full border-2 border-yellow-500 overflow-hidden bg-zinc-700 shadow-lg"
           >
-            <img src={user.img || DEFAULT_PROFILE_IMG} alt="프로필" className="w-full h-full object-cover" />
+            <img src={user.img || DEFAULT_PROFILE_IMG} alt="P" className="w-full h-full object-cover" />
           </button>
         </div>
       </header>
