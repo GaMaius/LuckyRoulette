@@ -2,7 +2,7 @@
 {
   "name": "lucky-strike-ai",
   "version": "1.1.0",
-  "description": "Lucky Strike AI with ESM Build for Koyeb",
+  "description": "Lucky Strike AI - Integrated P2P & Social Slot",
   "main": "relay-server.js",
   "scripts": {
     "start": "node relay-server.js",
