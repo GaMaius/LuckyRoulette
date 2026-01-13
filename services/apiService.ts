@@ -2,21 +2,13 @@
 import Gun from 'gun';
 import { User, Message, SharedMedia } from '../types';
 
-/**
- * 환경 변수 및 현재 접속 주소에서 피어를 자동으로 찾습니다.
- */
 const getAutoPeers = (): string[] => {
   const peers: string[] = [];
-  
   if (typeof window !== 'undefined') {
-    // Koyeb에서 생성된 현재 도메인의 /gun 경로를 자동으로 연결합니다.
     const currentHost = window.location.origin + '/gun';
     peers.push(currentHost);
   }
-
-  // 백업용 공용 피어
   peers.push('https://gun-manhattan.herokuapp.com/gun');
-
   return [...new Set(peers)];
 };
 
@@ -25,19 +17,16 @@ let connectedPeers: Set<string> = new Set();
 let statusCallback: ((count: number) => void) | null = null;
 
 class ApiService {
-  private dbName = 'lucky-strike-v105-mesh';
+  private dbName = 'lucky-strike-v106-mesh';
 
   async init(): Promise<void> {
     if (gunInstance) return;
-
     const finalPeers = getAutoPeers();
-    console.log('📡 [Gun] Connecting to Peers:', finalPeers);
-
     gunInstance = Gun({
       peers: finalPeers,
       localStorage: true,
       radisk: true,
-      retry: 5000
+      retry: 3000
     });
 
     gunInstance.on('hi', (peer: any) => {
@@ -52,9 +41,7 @@ class ApiService {
   }
 
   private notifyStatus() {
-    if (statusCallback) {
-      statusCallback(connectedPeers.size);
-    }
+    if (statusCallback) statusCallback(connectedPeers.size);
   }
 
   onConnectionChange(callback: (count: number) => void) {
@@ -62,17 +49,13 @@ class ApiService {
     if (gunInstance) callback(connectedPeers.size);
   }
 
-  private get db() {
-    if (!gunInstance) this.init();
-    return gunInstance.get(this.dbName);
-  }
-
   private get nodes() {
+    const root = gunInstance.get(this.dbName);
     return {
-      users: this.db.get('users'),
-      messages: this.db.get('messages'),
-      events: this.db.get('events'),
-      sharedGallery: this.db.get('shared-gallery')
+      users: root.get('users'),
+      messages: root.get('messages'),
+      events: root.get('events'),
+      sharedGallery: root.get('shared-gallery')
     };
   }
 
@@ -86,10 +69,20 @@ class ApiService {
   }
 
   async saveUser(user: User): Promise<void> {
-    const cleanUser = JSON.parse(JSON.stringify(user));
-    return new Promise((resolve) => {
-      this.nodes.users.get(user.id).put(cleanUser, (ack: any) => {
-        if (!ack.err) resolve();
+    // Gun.js는 중첩된 배열을 처리할 때 JSON 문자열로 변환하여 저장하는 것이 가장 안전합니다.
+    const dataToSave = {
+      ...user,
+      gallery: user.gallery ? JSON.stringify(user.gallery) : "[]"
+    };
+    
+    return new Promise((resolve, reject) => {
+      this.nodes.users.get(user.id).put(dataToSave, (ack: any) => {
+        if (ack.err) {
+          console.error('Gun Save Error:', ack.err);
+          reject(ack.err);
+        } else {
+          resolve();
+        }
       });
     });
   }
@@ -104,8 +97,7 @@ class ApiService {
   }
 
   async uploadToSharedGallery(media: SharedMedia): Promise<void> {
-    const cleanMedia = JSON.parse(JSON.stringify(media));
-    this.nodes.sharedGallery.get(media.id).put(cleanMedia);
+    this.nodes.sharedGallery.get(media.id).put(media);
   }
 
   subscribeMessages(callback: (msg: Message) => void) {
@@ -118,8 +110,7 @@ class ApiService {
   }
 
   async sendMessage(msg: Message): Promise<void> {
-    const cleanMsg = JSON.parse(JSON.stringify(msg));
-    this.nodes.messages.get(msg.id).put(cleanMsg);
+    this.nodes.messages.get(msg.id).put(msg);
   }
 
   subscribeEvents(callback: (event: string) => void) {

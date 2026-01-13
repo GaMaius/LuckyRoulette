@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { User, Message } from './types';
@@ -20,18 +21,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-
     const startApp = async () => {
       await api.init();
-      
-      api.onConnectionChange((count) => {
-        if (isMounted) setPeerCount(count);
-      });
-
-      api.subscribeUsers((newUserData) => {
-        if (isMounted) setUsers(prev => ({ ...prev, ...newUserData }));
-      });
-
+      api.onConnectionChange((count) => { if (isMounted) setPeerCount(count); });
+      api.subscribeUsers((newUserData) => { if (isMounted) setUsers(prev => ({ ...prev, ...newUserData })); });
       api.subscribeMessages((newMsg) => {
         if (isMounted) {
           setMessages(prev => {
@@ -40,17 +33,13 @@ const App: React.FC = () => {
           });
         }
       });
-
-      // 동기화 준비 완료 후 로딩 해제 (최소 1초 지연으로 로고 노출)
-      setTimeout(() => {
-        if (isMounted) setIsLoading(false);
-      }, 1000);
+      setTimeout(() => { if (isMounted) setIsLoading(false); }, 1500);
     };
-
     startApp();
     return () => { isMounted = false; };
   }, []);
 
+  // 실시간 동기화: 서버에서 유저 데이터가 변경되면 현재 사용자 상태도 업데이트
   useEffect(() => {
     if (currentUser && users[currentUser.id]) {
       const serverUser = users[currentUser.id];
@@ -60,50 +49,36 @@ const App: React.FC = () => {
     }
   }, [users, currentUser]);
 
-  const handleLogin = async (user: User, isNew: boolean = false) => {
+  const handleLogin = async (user: User) => {
     const updatedUser: User = { 
       ...user, 
       lastLogin: Date.now(), 
       environment: /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'Mobile' : 'PC' 
     };
     await api.saveUser(updatedUser);
-    const syncStatus = peerCount > 0 ? `Global Mesh (${peerCount} Peers)` : 'Local Cache Mode';
-    await api.logEvent(`👋 [${updatedUser.nick || updatedUser.id}] Sync Active: ${syncStatus}`);
     setCurrentUser(updatedUser);
   };
 
-  const handleLogout = useCallback(() => {
-    if (window.confirm('정말로 로그아웃 하시겠습니까?')) setCurrentUser(null);
-  }, []);
-
   const updateUser = useCallback(async (updatedUser: User) => {
     await api.saveUser(updatedUser);
+    // 상태 즉시 업데이트로 UI 반응성 확보
     setUsers(prev => ({ ...prev, [updatedUser.id]: updatedUser }));
-  }, []);
+    if (currentUser?.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+  }, [currentUser]);
 
   const deleteUser = useCallback(async (userId: string) => {
     await api.deleteUser(userId);
     if (currentUser?.id === userId) setCurrentUser(null);
   }, [currentUser]);
 
-  const addMessage = async (msg: Message) => {
-    await api.sendMessage(msg);
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="text-yellow-500 flex flex-col items-center gap-6">
-          <div className="relative w-20 h-20">
-            <div className="absolute inset-0 border-2 border-yellow-500/10 rounded-full"></div>
-            <div className="absolute inset-0 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <div className="text-center">
-            <h1 className="text-3xl font-black italic tracking-tighter text-white mb-2 drop-shadow-2xl">LUCKY STRIKE</h1>
-            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.3em] animate-pulse">
-              Initializing P2P Sync Engine...
-            </p>
-          </div>
+          <div className="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+          <h1 className="text-2xl font-black italic tracking-tighter text-white animate-pulse">LUCKY STRIKE AI</h1>
         </div>
       </div>
     );
@@ -116,20 +91,19 @@ const App: React.FC = () => {
           <Routes>
             {!currentUser ? (
               <>
-                <Route path="/login" element={<Auth mode="login" onLogin={(u) => handleLogin(u, false)} users={users} setUsers={() => {}} />} />
-                <Route path="/signup" element={<Auth mode="signup" onLogin={(u) => handleLogin(u, true)} users={users} setUsers={() => {}} />} />
+                <Route path="/login" element={<Auth mode="login" onLogin={handleLogin} users={users} setUsers={() => {}} />} />
+                <Route path="/signup" element={<Auth mode="signup" onLogin={handleLogin} users={users} setUsers={() => {}} />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />
               </>
             ) : (
-              <Route path="/" element={<Layout user={currentUser} onLogout={handleLogout} />}>
+              <Route path="/" element={<Layout user={currentUser} onLogout={() => setCurrentUser(null)} />}>
                 <Route index element={<SlotMachine user={currentUser} onUpdateUser={updateUser} />} />
                 <Route path="feed" element={<SharedGallery user={currentUser} />} />
                 <Route path="rank" element={<Ranking users={users} />} />
-                <Route path="chat" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={addMessage} />} />
-                <Route path="chat/:targetId" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={addMessage} />} />
-                <Route path="inquiry" element={<Navigate to="/chat/admin" replace />} />
-                <Route path="profile" element={<Profile user={currentUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={handleLogout} />} />
-                <Route path="profile/:id" element={<Profile user={currentUser} targetUsers={users} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={handleLogout} />} />
+                <Route path="chat" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={api.sendMessage.bind(api)} />} />
+                <Route path="chat/:targetId" element={<Chat user={currentUser} usersRecord={users} messages={messages} onSendMessage={api.sendMessage.bind(api)} />} />
+                <Route path="profile" element={<Profile user={currentUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={() => setCurrentUser(null)} />} />
+                <Route path="profile/:id" element={<Profile user={currentUser} targetUsers={users} onUpdateUser={updateUser} onDeleteUser={deleteUser} onLogout={() => setCurrentUser(null)} />} />
                 {currentUser.isAdmin && (
                   <Route path="admin" element={<Admin users={users} onUpdateUser={updateUser} onDeleteUser={deleteUser} />} />
                 )}
