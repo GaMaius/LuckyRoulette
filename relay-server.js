@@ -4,11 +4,12 @@ const path = require('path');
 const cors = require('cors');
 
 const app = express();
-const port = process.env.PORT || 8080;
+// Render는 process.env.PORT를 자동으로 할당합니다.
+const port = process.env.PORT || 10000; 
 
 app.use(cors());
 
-// 정적 파일 서빙 (빌드된 index.js 및 index.html)
+// 정적 파일 서빙
 app.use(express.static(path.join(__dirname)));
 
 const server = app.listen(port, '0.0.0.0', () => {
@@ -22,7 +23,7 @@ const gun = Gun({
   radisk: true
 });
 
-// SPA 라우팅 대응
+// SPA 라우팅 대응 (모든 경로를 index.html로)
 app.get('*', (req, res) => {
   if (req.url.startsWith('/gun')) return;
   res.sendFile(path.join(__dirname, 'index.html'));
