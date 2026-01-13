@@ -1,4 +1,34 @@
 
+export interface Comment {
+  id: string;
+  uploaderId: string;
+  uploaderNick: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface Post {
+  id: string;
+  title: string;
+  content: string;
+  uploaderId: string;
+  uploaderNick: string;
+  img?: string;
+  timestamp: number;
+  isNotice?: boolean;
+  comments?: Comment[];
+}
+
+// Added SharedMedia interface for the global shared gallery/feed feature
+export interface SharedMedia {
+  id: string;
+  uploaderId: string;
+  uploaderNick: string;
+  data: string;
+  timestamp: number;
+  type: 'image' | 'video';
+}
+
 export interface User {
   id: string;
   pw: string;
@@ -10,16 +40,7 @@ export interface User {
   isAdmin?: boolean;
   lastLogin?: number;
   environment?: 'PC' | 'Mobile';
-  lastRead?: Record<string, number>; // key: 'global' 또는 상대방 id, value: 마지막으로 읽은 timestamp
-}
-
-export interface SharedMedia {
-  id: string;
-  uploaderId: string;
-  uploaderNick: string;
-  data: string;
-  timestamp: number;
-  type: 'image' | 'video';
+  lastRead?: Record<string, number>; 
 }
 
 export interface Message {
@@ -31,15 +52,13 @@ export interface Message {
   timestamp: number;
   type: 'global' | 'direct';
   targetId?: string;
+  isDeleted?: boolean;
+  replyTo?: {
+    id: string;
+    senderNick: string;
+    text: string;
+  };
 }
-
-export interface ConnectionStatus {
-  connected: boolean;
-  activePeers: string[];
-  isLocalOnly: boolean;
-}
-
-export type ViewType = 'login' | 'signup' | 'game' | 'rank' | 'chat' | 'profile' | 'admin' | 'shared-gallery';
 
 export const DEFAULT_PROFILE_IMG = "https://picsum.photos/seed/user/200/200";
 export const SLOT_SYMBOLS = ['🍒', '🍋', '🍉', '🍇', '💎', '7️⃣'];

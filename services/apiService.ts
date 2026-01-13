@@ -1,6 +1,6 @@
 
 import Gun from 'gun';
-import { User, Message, SharedMedia } from '../types';
+import { User, Message, Post, Comment, SharedMedia } from '../types';
 
 const getAutoPeers = (): string[] => {
   const peers: string[] = [];
@@ -17,7 +17,7 @@ let connectedPeers: Set<string> = new Set();
 let statusCallback: ((count: number) => void) | null = null;
 
 class ApiService {
-  private dbName = 'lucky-strike-v108-mesh';
+  private dbName = 'lucky-strike-v109-final'; // 피드 초기화를 위해 노드 이름 변경
 
   async init(): Promise<void> {
     if (gunInstance) return;
@@ -55,24 +55,17 @@ class ApiService {
       users: root.get('users'),
       messages: root.get('messages'),
       events: root.get('events'),
+      board: root.get('board-v2'),
       sharedGallery: root.get('shared-gallery')
     };
   }
 
-  /**
-   * Gun.js에 저장하기 전 데이터를 정제합니다.
-   * 내부 메타데이터(_)를 삭제하고 undefined를 null로 바꿉니다.
-   */
   private sanitize(obj: any) {
     if (!obj || typeof obj !== 'object') return obj;
     const sanitized = { ...obj };
-    // Gun.js 내부 필드 제거 (충돌 방지 핵심)
     delete (sanitized as any)._;
-    
     Object.keys(sanitized).forEach(key => {
-      if (sanitized[key] === undefined) {
-        sanitized[key] = null;
-      }
+      if (sanitized[key] === undefined) sanitized[key] = null;
     });
     return sanitized;
   }
@@ -82,7 +75,6 @@ class ApiService {
       if (data && typeof data === 'object') {
         const { _, ...user } = data;
         if (user && user.id) {
-          // 문자열로 저장된 복잡한 객체들을 파싱
           if (typeof user.gallery === 'string') {
             try { user.gallery = JSON.parse(user.gallery); } catch (e) { user.gallery = []; }
           }
@@ -91,46 +83,54 @@ class ApiService {
           }
           callback({ [id]: user as User });
         }
+      } else if (data === null) {
+        // 유저 삭제 대응 (로컬 상태 반영은 App.tsx에서 처리)
       }
     });
   }
 
   async saveUser(user: User): Promise<void> {
-    // 저장 전 데이터 직렬화 및 정제
     const dataToSave = this.sanitize({
       ...user,
       gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : (user.gallery || "[]"),
       lastRead: (user.lastRead && typeof user.lastRead === 'object') ? JSON.stringify(user.lastRead) : (user.lastRead || "{}")
     });
-    
     return new Promise((resolve, reject) => {
       this.nodes.users.get(user.id).put(dataToSave, (ack: any) => {
-        if (ack.err) {
-          console.error('Gun Save Error:', ack.err);
-          reject(new Error(ack.err));
-        } else {
-          resolve();
-        }
+        if (ack.err) reject(new Error(ack.err));
+        else resolve();
       });
     });
   }
 
-  subscribeSharedGallery(callback: (media: SharedMedia) => void) {
-    this.nodes.sharedGallery.map().on((data: any) => {
+  subscribeBoard(callback: (post: Post) => void) {
+    this.nodes.board.map().on((data: any) => {
       if (data && data.id) {
-        const { _, ...media } = data;
-        callback(media as SharedMedia);
+        const { _, ...post } = data;
+        if (typeof post.comments === 'string') {
+          try { post.comments = JSON.parse(post.comments); } catch (e) { post.comments = []; }
+        }
+        callback(post as Post);
       }
     });
   }
 
-  async uploadToSharedGallery(media: SharedMedia): Promise<void> {
-    const data = this.sanitize(media);
+  async savePost(post: Post): Promise<void> {
+    const data = this.sanitize({
+      ...post,
+      comments: JSON.stringify(post.comments || [])
+    });
     return new Promise((resolve, reject) => {
-      this.nodes.sharedGallery.get(media.id).put(data, (ack: any) => {
+      this.nodes.board.get(post.id).put(data, (ack: any) => {
         if (ack.err) reject(ack.err);
         else resolve();
       });
+    });
+  }
+
+  async deletePost(postId: string): Promise<void> {
+    return new Promise((resolve) => {
+      this.nodes.board.get(postId).put(null as any, () => resolve());
     });
   }
 
@@ -138,28 +138,38 @@ class ApiService {
     this.nodes.messages.map().on((data: any) => {
       if (data && data.id) {
         const { _, ...msg } = data;
+        if (typeof msg.replyTo === 'string') {
+          try { msg.replyTo = JSON.parse(msg.replyTo); } catch (e) { msg.replyTo = undefined; }
+        }
         callback(msg as Message);
       }
     });
   }
 
   async sendMessage(msg: Message): Promise<void> {
-    const data = this.sanitize(msg);
+    const data = this.sanitize({
+      ...msg,
+      replyTo: msg.replyTo ? JSON.stringify(msg.replyTo) : null
+    });
     return new Promise((resolve, reject) => {
       this.nodes.messages.get(msg.id).put(data, (ack: any) => {
-        if (ack.err) {
-          console.error('Send Message Error:', ack.err);
-          reject(new Error(ack.err));
-        } else {
-          resolve();
-        }
+        if (ack.err) reject(new Error(ack.err));
+        else resolve();
       });
     });
   }
 
+  async deleteMessage(msgId: string): Promise<void> {
+    this.nodes.messages.get(msgId).get('isDeleted').put(true);
+    this.nodes.messages.get(msgId).get('text').put('삭제된 메시지입니다.');
+  }
+
+  // Subscribe to real-time events for the live activity feed
   subscribeEvents(callback: (event: string) => void) {
     this.nodes.events.map().on((data: any) => {
-      if (typeof data === 'string') callback(data);
+      if (data && typeof data === 'string') {
+        callback(data);
+      }
     });
   }
 
@@ -167,9 +177,33 @@ class ApiService {
     this.nodes.events.set(message);
   }
 
+  // Subscribe to the shared gallery for global media sharing
+  subscribeSharedGallery(callback: (item: SharedMedia) => void) {
+    this.nodes.sharedGallery.map().on((data: any) => {
+      if (data && data.id) {
+        const { _, ...item } = data;
+        callback(item as SharedMedia);
+      }
+    });
+  }
+
+  // Upload a new media item to the shared gallery
+  async uploadToSharedGallery(media: SharedMedia): Promise<void> {
+    const data = this.sanitize(media);
+    return new Promise((resolve, reject) => {
+      this.nodes.sharedGallery.get(media.id).put(data, (ack: any) => {
+        if (ack.err) reject(new Error(ack.err));
+        else resolve();
+      });
+    });
+  }
+
   async deleteUser(userId: string): Promise<void> {
     return new Promise((resolve) => {
-      this.nodes.users.get(userId).put(null as any, () => resolve());
+      this.nodes.users.get(userId).put(null as any, () => {
+        // 계정 연관 데이터들 정리 (선택 사항)
+        resolve();
+      });
     });
   }
 }
