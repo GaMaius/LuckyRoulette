@@ -17,7 +17,7 @@ let connectedPeers: Set<string> = new Set();
 let statusCallback: ((count: number) => void) | null = null;
 
 class ApiService {
-  private dbName = 'lucky-strike-v107-mesh';
+  private dbName = 'lucky-strike-v108-mesh';
 
   async init(): Promise<void> {
     if (gunInstance) return;
@@ -59,12 +59,22 @@ class ApiService {
     };
   }
 
+  // Gun.js는 undefined 값을 싫어하므로 유효한 값으로 치환하는 헬퍼
+  private sanitize(obj: any) {
+    const sanitized = { ...obj };
+    Object.keys(sanitized).forEach(key => {
+      if (sanitized[key] === undefined) {
+        sanitized[key] = null;
+      }
+    });
+    return sanitized;
+  }
+
   subscribeUsers(callback: (users: Record<string, User>) => void) {
     this.nodes.users.map().on((data: any, id: string) => {
-      if (data) {
+      if (data && typeof data === 'object') {
         const { _, ...user } = data;
         if (user && user.id) {
-          // 갤러리 데이터가 문자열인 경우 파싱 시도
           if (typeof user.gallery === 'string') {
             try { user.gallery = JSON.parse(user.gallery); } catch (e) { user.gallery = []; }
           }
@@ -75,11 +85,10 @@ class ApiService {
   }
 
   async saveUser(user: User): Promise<void> {
-    // Gun.js의 성능을 위해 배열을 문자열화하여 저장
-    const dataToSave = {
+    const dataToSave = this.sanitize({
       ...user,
-      gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : user.gallery
-    };
+      gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : (user.gallery || "[]")
+    });
     
     return new Promise((resolve, reject) => {
       this.nodes.users.get(user.id).put(dataToSave, (ack: any) => {
@@ -103,7 +112,7 @@ class ApiService {
   }
 
   async uploadToSharedGallery(media: SharedMedia): Promise<void> {
-    this.nodes.sharedGallery.get(media.id).put(media);
+    this.nodes.sharedGallery.get(media.id).put(this.sanitize(media));
   }
 
   subscribeMessages(callback: (msg: Message) => void) {
@@ -116,7 +125,7 @@ class ApiService {
   }
 
   async sendMessage(msg: Message): Promise<void> {
-    this.nodes.messages.get(msg.id).put(msg);
+    this.nodes.messages.get(msg.id).put(this.sanitize(msg));
   }
 
   subscribeEvents(callback: (event: string) => void) {
