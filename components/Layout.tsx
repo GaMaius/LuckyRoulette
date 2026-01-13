@@ -89,6 +89,8 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
       <nav className="h-20 bg-zinc-800/90 backdrop-blur-lg border-t border-zinc-700 fixed bottom-0 left-0 right-0 max-w-md mx-auto flex items-center justify-around px-2 z-50">
         {navItems.map((item) => {
           const isActive = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+          const hasBadge = (item.badge ?? 0) > 0;
+
           return (
             <Link
               key={item.path}
@@ -99,11 +101,14 @@ const Layout: React.FC<LayoutProps> = ({ user }) => {
             >
               <i className={`fas ${item.icon} text-lg`}></i>
               <span className="text-[10px] font-bold">{item.label}</span>
-              {item.badge && item.badge > 0 && (
-                <div className="absolute top-2 right-4 bg-red-600 text-[8px] text-white font-black px-1.5 py-0.5 rounded-full min-w-[16px] text-center border-2 border-zinc-800">
-                  {item.badge > 99 ? '99+' : item.badge}
+              
+              {/* badge가 0보다 클 때만 명시적으로 렌더링 */}
+              {hasBadge && (
+                <div className="absolute top-2 right-4 bg-red-600 text-[8px] text-white font-black px-1.5 py-0.5 rounded-full min-w-[16px] text-center border-2 border-zinc-800 shadow-lg animate-bounce-subtle">
+                  {item.badge! > 99 ? '99+' : item.badge}
                 </div>
               )}
+              
               {isActive && <div className="w-1 h-1 rounded-full bg-yellow-400"></div>}
             </Link>
           );
