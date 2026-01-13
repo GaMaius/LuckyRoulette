@@ -109,7 +109,8 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage 
             </div>
           )}
 
-          {Object.values(usersRecord).filter(u => u.id !== user.id && !u.isAdmin).map(u => (
+          {/* Fix: Cast Object.values to User array to fix unknown type issues in filter and map (lines 112-121) */}
+          {(Object.values(usersRecord) as User[]).filter(u => u.id !== user.id && !u.isAdmin).map(u => (
             <div 
               key={u.id}
               onClick={() => navigate(`/chat/${u.id}`)}

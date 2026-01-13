@@ -98,7 +98,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
     const files = e.target.files;
     if (files && files.length > 0) {
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
-      const validFiles = Array.from(files).filter(file => {
+      // Fix: Add explicit type casting for File objects to resolve unknown type errors (lines 102-107).
+      const validFiles = (Array.from(files) as File[]).filter(file => {
         if (!allowedTypes.includes(file.type)) {
           alert(`보안 정책상 허용되지 않는 파일: ${file.name}`);
           return false;
@@ -116,6 +117,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
       const newGalleryItems: string[] = [];
       let processedCount = 0;
 
+      // Fix: Ensure validFiles is treated as an array of File objects for processing.
       validFiles.forEach(file => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -130,7 +132,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
             }, 1000);
           }
         };
-        reader.readAsDataURL(file);
+        // Fix: Explicitly cast file to ensure it's assignable to Blob (line 133).
+        reader.readAsDataURL(file as Blob);
       });
     }
   };

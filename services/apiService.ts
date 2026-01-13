@@ -3,18 +3,22 @@ import Gun from 'gun';
 import { User, Message, SharedMedia } from '../types';
 
 /**
- * 환경 변수에서 피어 목록을 가져옵니다.
+ * 환경 변수 및 현재 접속 주소에서 피어를 자동으로 찾습니다.
  */
-const getGunPeers = (): string => {
-  // @ts-ignore
-  const peers = process.env.NEXT_PUBLIC_GUN_PEERS || process.env.GUN_PEERS || (window as any).process?.env?.NEXT_PUBLIC_GUN_PEERS;
-  return peers || "";
-};
+const getAutoPeers = (): string[] => {
+  const peers: string[] = [];
+  
+  if (typeof window !== 'undefined') {
+    // Koyeb에서 생성된 현재 도메인의 /gun 경로를 자동으로 연결합니다.
+    const currentHost = window.location.origin + '/gun';
+    peers.push(currentHost);
+  }
 
-const PUBLIC_PEERS = [
-  'https://gun-manhattan.herokuapp.com/gun',
-  'https://gundb.com/gun'
-];
+  // 백업용 공용 피어
+  peers.push('https://gun-manhattan.herokuapp.com/gun');
+
+  return [...new Set(peers)];
+};
 
 let gunInstance: any = null;
 let connectedPeers: Set<string> = new Set();
@@ -26,48 +30,25 @@ class ApiService {
   async init(): Promise<void> {
     if (gunInstance) return;
 
-    const rawPeersEnv = getGunPeers();
-    const envPeers = rawPeersEnv ? rawPeersEnv.split(',').map(p => p.trim()) : [];
-    
-    const processPeerUrl = (url: string) => {
-      if (!url) return "";
-      let target = url;
-      // Render 서버 주소 보정
-      if (!target.includes('/gun')) {
-        target = target.endsWith('/') ? target + 'gun' : target + '/gun';
-      }
-      return target;
-    };
-
-    const finalPeers = [...new Set([...envPeers.map(processPeerUrl), ...PUBLIC_PEERS.map(processPeerUrl)])].filter(Boolean);
-
+    const finalPeers = getAutoPeers();
     console.log('📡 [Gun] Connecting to Peers:', finalPeers);
 
     gunInstance = Gun({
       peers: finalPeers,
       localStorage: true,
       radisk: true,
-      retry: 7000 // Render 서버가 깨어날 시간을 충분히 줌
+      retry: 5000
     });
 
     gunInstance.on('hi', (peer: any) => {
-      console.log('✅ [Gun] Peer Active:', peer.url);
       connectedPeers.add(peer.url);
       this.notifyStatus();
     });
 
     gunInstance.on('bye', (peer: any) => {
-      console.log('❌ [Gun] Peer Lost:', peer.url);
       connectedPeers.delete(peer.url);
       this.notifyStatus();
     });
-    
-    setTimeout(() => {
-      if (connectedPeers.size === 0) {
-        console.warn("⚠️ [Gun] 전용 서버(Render) 연결 지연 중. 첫 접속 시 깨어나는 데 30초가 걸릴 수 있습니다.");
-        this.notifyStatus();
-      }
-    }, 12000);
   }
 
   private notifyStatus() {

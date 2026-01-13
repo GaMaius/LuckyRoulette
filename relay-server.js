@@ -1,51 +1,43 @@
 
 /**
- * Lucky Strike 전용 Gun.js 릴레이 서버
- * Render.com, Railway.app, DigitalOcean 등에 배포 가능
+ * Lucky Strike 통합 서버 (Gun.js 릴레이 + 웹 호스팅)
+ * Koyeb 배포 최적화 버전
  */
 const express = require('express');
 const Gun = require('gun');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
-const port = process.env.PORT || 8765;
+// Koyeb은 환경 변수 PORT를 통해 포트를 지정합니다. 기본값 8080.
+const port = process.env.PORT || 8080;
 
-// 모든 오리진에서의 접속 허용 (Vercel 클라이언트 지원용)
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Gun.js 라이브러리 서빙
+app.use(cors());
 app.use(Gun.serve);
 
-const server = app.listen(port, () => {
+// 프론트엔드 정적 파일 서빙
+app.use(express.static(path.join(__dirname, './')));
+
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`
-  🚀 Lucky Strike Dedicated Relay Server
-  --------------------------------------
+  🚀 Lucky Strike All-in-One Server is Live!
+  ------------------------------------------
   Port: ${port}
-  Status: Running
+  Status: Production (Koyeb Mode)
   Endpoint: /gun
-  --------------------------------------
+  ------------------------------------------
   `);
 });
 
-// Gun 인스턴스 초기화 (서버측 데이터 영속성 강화)
+// Gun 인스턴스 초기화 (파일 기반 저장소 사용)
 const gun = Gun({
   web: server,
-  localStorage: false, // 서버에서는 파일 시스템(Radisk)을 주로 사용
-  radisk: true,
-  chunk: 1024 * 1024 // 전송 청크 최적화
+  localStorage: false,
+  radisk: true
 });
 
-// 상태 확인용 헬스체크 엔드포인트
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', peers: Object.keys(gun._.opt.peers).length });
+// SPA 라우팅: /gun 이외의 모든 경로는 index.html로 연결
+app.get('*', (req, res) => {
+  if (req.url.startsWith('/gun')) return;
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
-
-app.get('/', (req, res) => {
-  res.send('<h1>Lucky Strike P2P Relay Server is Active</h1>');
-});
-
-console.log('🔗 Peer-to-Peer Mesh Network Listener Active.');
