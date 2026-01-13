@@ -5,6 +5,7 @@ export interface Comment {
   uploaderNick: string;
   text: string;
   timestamp: number;
+  replies?: Comment[]; // 대댓글을 위한 필드
 }
 
 export interface Post {
@@ -19,7 +20,6 @@ export interface Post {
   comments?: Comment[];
 }
 
-// Added SharedMedia interface for the global shared gallery/feed feature
 export interface SharedMedia {
   id: string;
   uploaderId: string;

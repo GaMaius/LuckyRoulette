@@ -15,11 +15,18 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
+  const [rememberId, setRememberId] = useState(false);
+  const [stayLoggedIn, setStayLoggedIn] = useState(false);
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 데이터 로딩 대기를 위한 효과
+  // 초기 로드 시 저장된 아이디 확인
   useEffect(() => {
+    const savedId = localStorage.getItem('lucky_saved_id');
+    if (savedId && mode === 'login') {
+      setId(savedId);
+      setRememberId(true);
+    }
     setError('');
   }, [mode]);
 
@@ -33,7 +40,7 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
     const cleanId = id.trim();
     const cleanPw = pw.trim();
 
-    // 인위적인 지연을 주어 Gun.js 데이터 동기화 시간을 확보 (네트워크 레이턴시 고려)
+    // Gun.js 동기화 대기
     await new Promise(resolve => setTimeout(resolve, 800));
 
     try {
@@ -42,11 +49,7 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
       if (mode === 'signup') {
         if (cleanPw.length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다.');
         if (cleanPw !== confirmPw.trim()) throw new Error('비밀번호 확인이 일치하지 않습니다.');
-        
-        // 이미 존재하는 유저인지 확인
-        if (users[cleanId]) {
-          throw new Error('이미 사용 중인 아이디입니다.');
-        }
+        if (users[cleanId]) throw new Error('이미 사용 중인 아이디입니다.');
 
         const newUser: User = {
           id: cleanId, 
@@ -63,22 +66,21 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
         alert('회원가입이 완료되었습니다!');
         navigate('/', { replace: true });
       } else {
-        // 관리자 계정 하드코딩 예외 처리
+        // 관리자 예외 처리
         if (cleanId === 'admin' && cleanPw === 'admin0505') {
           const adminUser: User = users['admin'] || {
             id: 'admin', pw: 'admin0505', balance: 999999999, nick: '최고관리자', 
             bio: '시스템 총괄 제어', img: 'https://picsum.photos/seed/admin/200/200', isAdmin: true,
             gallery: []
           };
-          await onLogin(adminUser);
-          navigate('/', { replace: true });
+          
+          handlePostLogin(adminUser);
           return;
         }
 
         const user = users[cleanId];
         if (user && user.pw === cleanPw) {
-          await onLogin(user);
-          navigate('/', { replace: true });
+          handlePostLogin(user);
         } else {
           throw new Error('아이디 또는 비밀번호가 잘못되었습니다.');
         }
@@ -90,6 +92,25 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
     }
   };
 
+  const handlePostLogin = (user: User) => {
+    // 아이디 기억하기 저장
+    if (rememberId) {
+      localStorage.setItem('lucky_saved_id', user.id);
+    } else {
+      localStorage.removeItem('lucky_saved_id');
+    }
+
+    // 로그인 유지하기 저장
+    if (stayLoggedIn) {
+      localStorage.setItem('lucky_session', user.id);
+    } else {
+      localStorage.removeItem('lucky_session');
+    }
+
+    onLogin(user);
+    navigate('/', { replace: true });
+  };
+
   return (
     <div className="flex-1 flex flex-col justify-center px-10 bg-zinc-950">
       <div className="mb-12 text-center animate-fadeIn">
@@ -98,22 +119,52 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <input
-          type="text" value={id} onChange={(e) => setId(e.target.value)}
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white focus:outline-none focus:border-yellow-500 transition-all"
-          placeholder="아이디" disabled={isProcessing}
-        />
-        <input
-          type="password" value={pw} onChange={(e) => setPw(e.target.value)}
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white focus:outline-none focus:border-yellow-500 transition-all"
-          placeholder="비밀번호" disabled={isProcessing}
-        />
-        {mode === 'signup' && (
+        <div className="space-y-3">
           <input
-            type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white focus:outline-none focus:border-yellow-500 animate-slideUp"
-            placeholder="비밀번호 확인" disabled={isProcessing}
+            type="text" value={id} onChange={(e) => setId(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white focus:outline-none focus:border-yellow-500 transition-all"
+            placeholder="아이디" disabled={isProcessing}
           />
+          <input
+            type="password" value={pw} onChange={(e) => setPw(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white focus:outline-none focus:border-yellow-500 transition-all"
+            placeholder="비밀번호" disabled={isProcessing}
+          />
+          {mode === 'signup' && (
+            <input
+              type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white focus:outline-none focus:border-yellow-500 animate-slideUp"
+              placeholder="비밀번호 확인" disabled={isProcessing}
+            />
+          )}
+        </div>
+
+        {mode === 'login' && (
+          <div className="flex flex-col gap-2 px-2 py-1">
+            <label className="flex items-center gap-3 cursor-pointer group w-fit">
+              <div className="relative flex items-center justify-center">
+                <input 
+                  type="checkbox" checked={rememberId} 
+                  onChange={(e) => setRememberId(e.target.checked)}
+                  className="peer appearance-none w-5 h-5 border-2 border-zinc-700 rounded-lg bg-zinc-800 checked:bg-yellow-500 checked:border-yellow-500 transition-all cursor-pointer"
+                />
+                <i className="fas fa-check absolute text-[10px] text-black opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity"></i>
+              </div>
+              <span className="text-[11px] font-bold text-zinc-500 group-hover:text-zinc-300 transition-colors">아이디 기억하기</span>
+            </label>
+            
+            <label className="flex items-center gap-3 cursor-pointer group w-fit">
+              <div className="relative flex items-center justify-center">
+                <input 
+                  type="checkbox" checked={stayLoggedIn} 
+                  onChange={(e) => setStayLoggedIn(e.target.checked)}
+                  className="peer appearance-none w-5 h-5 border-2 border-zinc-700 rounded-lg bg-zinc-800 checked:bg-yellow-500 checked:border-yellow-500 transition-all cursor-pointer"
+                />
+                <i className="fas fa-check absolute text-[10px] text-black opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity"></i>
+              </div>
+              <span className="text-[11px] font-bold text-zinc-500 group-hover:text-zinc-300 transition-colors">로그인 상태 유지</span>
+            </label>
+          </div>
         )}
 
         {error && (
@@ -124,7 +175,7 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
 
         <button
           type="submit" disabled={isProcessing}
-          className="mt-4 w-full py-5 bg-yellow-500 text-black font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50 border-b-4 border-yellow-700"
+          className="mt-2 w-full py-5 bg-yellow-500 text-black font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50 border-b-4 border-yellow-700"
         >
           {isProcessing ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
         </button>
