@@ -17,7 +17,7 @@ let connectedPeers: Set<string> = new Set();
 let statusCallback: ((count: number) => void) | null = null;
 
 class ApiService {
-  private dbName = 'lucky-strike-v106-mesh';
+  private dbName = 'lucky-strike-v107-mesh';
 
   async init(): Promise<void> {
     if (gunInstance) return;
@@ -63,16 +63,22 @@ class ApiService {
     this.nodes.users.map().on((data: any, id: string) => {
       if (data) {
         const { _, ...user } = data;
-        if (user && user.id) callback({ [id]: user as User });
+        if (user && user.id) {
+          // 갤러리 데이터가 문자열인 경우 파싱 시도
+          if (typeof user.gallery === 'string') {
+            try { user.gallery = JSON.parse(user.gallery); } catch (e) { user.gallery = []; }
+          }
+          callback({ [id]: user as User });
+        }
       }
     });
   }
 
   async saveUser(user: User): Promise<void> {
-    // Gun.js는 중첩된 배열을 처리할 때 JSON 문자열로 변환하여 저장하는 것이 가장 안전합니다.
+    // Gun.js의 성능을 위해 배열을 문자열화하여 저장
     const dataToSave = {
       ...user,
-      gallery: user.gallery ? JSON.stringify(user.gallery) : "[]"
+      gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : user.gallery
     };
     
     return new Promise((resolve, reject) => {
