@@ -1,8 +1,7 @@
-
 {
   "name": "lucky-strike-ai",
-  "version": "1.1.0",
-  "description": "Lucky Strike AI - Integrated P2P & Social Slot",
+  "version": "1.1.2",
+  "description": "Lucky Strike AI - Production Ready",
   "main": "relay-server.js",
   "scripts": {
     "start": "node relay-server.js",
@@ -10,10 +9,10 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "gun": "^0.2020.1239",
-    "cors": "^2.8.5",
-    "esbuild": "^0.20.1"
+    "express": "4.18.2",
+    "gun": "0.2020.1239",
+    "cors": "2.8.5",
+    "esbuild": "0.20.1"
   },
   "engines": {
     "node": "20.x"
