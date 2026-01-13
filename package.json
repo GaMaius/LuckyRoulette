@@ -1,16 +1,19 @@
 
 {
   "name": "lucky-strike-ai",
-  "version": "1.0.0",
-  "description": "AI-powered social slot machine with P2P sync",
+  "version": "1.1.0",
+  "description": "Lucky Strike AI with ESM Build for Koyeb",
   "main": "relay-server.js",
   "scripts": {
-    "start": "node relay-server.js"
+    "start": "node relay-server.js",
+    "build": "esbuild index.tsx --bundle --outfile=index.js --format=esm --minify --loader:.tsx=tsx --loader:.ts=ts --external:react --external:react-dom --external:react-router-dom --external:gun",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "express": "^4.18.2",
     "gun": "^0.2020.1239",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "esbuild": "^0.20.1"
   },
   "engines": {
     "node": ">=18.0.0"
