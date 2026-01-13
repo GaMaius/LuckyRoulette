@@ -15,8 +15,7 @@ interface ProfileProps {
 const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onLogout, targetUsers }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const normalUploadRef = useRef<HTMLInputElement>(null);
-  const autoSyncRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const isSelf = !id || id === user.id;
   const targetUser = isSelf ? user : (targetUsers?.[id!] || null);
@@ -28,9 +27,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
   const [balance, setBalance] = useState(0);
   const [gallery, setGallery] = useState<string[]>([]);
   
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
 
   useEffect(() => {
@@ -72,17 +70,17 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isAuto: boolean) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setIsSyncing(true);
-      setShowUploadOptions(false);
+      setIsUploading(true);
       const newItems: string[] = [];
       let loaded = 0;
 
       Array.from(files).forEach((file: File) => {
-        if (file.size > 5 * 1024 * 1024) { // 5MB 제한으로 상향
+        if (file.size > 10 * 1024 * 1024) { // 10MB 제한
           loaded++;
+          if (loaded === files.length && newItems.length === 0) setIsUploading(false);
           return;
         }
         const reader = new FileReader();
@@ -92,14 +90,16 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
           if (loaded === files.length) {
             const updatedGallery = [...gallery, ...newItems];
             setGallery(updatedGallery);
-            // 업로드한 첫 번째 사진을 프로필 이미지로 즉시 설정
-            if (!isAuto && newItems[0]) setImg(newItems[0]);
+            
+            // 본인 프로필일 경우 첫 번째 사진을 즉시 프로필로 설정
+            const newProfileImg = (isSelf && newItems[0]) ? newItems[0] : img;
+            if (isSelf && newItems[0]) setImg(newItems[0]);
 
-            const fastUpdate = { ...targetUser, gallery: updatedGallery, img: (!isAuto && newItems[0]) ? newItems[0] : img };
+            const fastUpdate = { ...targetUser, gallery: updatedGallery, img: newProfileImg };
             api.saveUser(fastUpdate).then(() => {
               onUpdateUser(fastUpdate);
-              setIsSyncing(false);
-              alert(`${isAuto ? '다량 자동 동기화' : '일반 사진 업로드'} 완료! (${newItems.length}개)`);
+              setIsUploading(false);
+              alert(`${newItems.length}개의 사진이 보관함에 추가되었습니다.`);
             });
           }
         };
@@ -111,11 +111,28 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
   const isAdmin = user.isAdmin;
   const canEdit = isSelf || isAdmin;
 
+  // 보관함 접근 권한 확인 (본인이거나 관리자여야 함)
+  const canAccessLibrary = isSelf || isAdmin;
+
+  const removePhoto = (idx: number) => {
+    if (!window.confirm('이 사진을 보관함에서 영구 삭제할까요?')) return;
+    const newG = gallery.filter((_, i) => i !== idx);
+    setGallery(newG);
+    const updatedUser = { ...targetUser, gallery: newG };
+    api.saveUser(updatedUser).then(() => onUpdateUser(updatedUser));
+  };
+
   return (
     <div className="flex flex-col gap-6 animate-fadeIn pb-24 relative">
-      {/* 파일 인풋 */}
-      <input type="file" ref={normalUploadRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, false)} />
-      <input type="file" ref={autoSyncRef} className="hidden" multiple accept="image/*" onChange={(e) => handleFileUpload(e, true)} />
+      {/* 숨겨진 다중 파일 인풋 */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        className="hidden" 
+        multiple 
+        accept="image/*" 
+        onChange={handleFileUpload} 
+      />
 
       <div className="flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 active:scale-90 transition-transform">
@@ -131,9 +148,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
           <div className="w-36 h-36 rounded-full border-4 border-yellow-500 overflow-hidden bg-zinc-700 shadow-[0_0_30px_rgba(234,179,8,0.2)]">
             <img src={img} alt="P" className="w-full h-full object-cover" />
           </div>
-          {canEdit && (
+          {/* 카메라 아이콘: 누르면 보관함 열림 */}
+          {canAccessLibrary && (
             <button 
-              onClick={() => setShowUploadOptions(true)}
+              onClick={() => setShowMediaLibrary(true)}
               className="absolute bottom-1 right-1 w-11 h-11 bg-yellow-500 rounded-full flex items-center justify-center shadow-xl border-4 border-zinc-900 active:scale-90 transition-transform z-20"
             >
               <i className="fas fa-camera text-black text-sm"></i>
@@ -180,25 +198,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
             />
           </div>
         </div>
-
-        {/* 미디어 라이브러리 (관리자 전용) */}
-        {isAdmin && (
-          <button 
-            onClick={() => setShowMediaLibrary(true)}
-            className="bg-gradient-to-r from-blue-600/20 to-blue-900/20 p-5 rounded-2xl border border-blue-500/30 flex items-center justify-between hover:from-blue-600/30 transition-all shadow-lg group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform">
-                <i className="fas fa-folder-open text-xl"></i>
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-black text-white">미디어 라이브러리</p>
-                <p className="text-[9px] text-blue-400 font-black uppercase tracking-widest">총 {gallery.length}개의 보안 파일 보관 중</p>
-              </div>
-            </div>
-            <i className="fas fa-chevron-right text-blue-800 group-hover:translate-x-1 transition-transform"></i>
-          </button>
-        )}
       </div>
 
       {canEdit && (
@@ -231,73 +230,32 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         </div>
       )}
 
-      {/* 업로드 옵션 모달 */}
-      {showUploadOptions && (
-        <div className="fixed inset-0 z-[300] bg-black/80 flex items-end justify-center animate-fadeIn backdrop-blur-md" onClick={() => setShowUploadOptions(false)}>
-          <div className="w-full max-w-md bg-zinc-900 rounded-t-[3rem] p-8 flex flex-col gap-4 animate-slideUp border-t border-zinc-800" onClick={e => e.stopPropagation()}>
-            <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-4"></div>
-            <h3 className="text-lg font-black text-white text-center mb-4 italic tracking-tighter">사진 업로드 방식 선택</h3>
-            
-            <button 
-              onClick={() => normalUploadRef.current?.click()}
-              className="flex items-center gap-5 p-5 bg-zinc-800 rounded-3xl hover:bg-zinc-700 transition-all border border-zinc-700/50 group"
-            >
-              <div className="w-14 h-14 bg-yellow-500/10 rounded-2xl flex items-center justify-center text-yellow-500 group-active:scale-90 transition-transform">
-                <i className="fas fa-image text-2xl"></i>
-              </div>
-              <div className="text-left">
-                <p className="font-black text-white text-base">일반 업로드</p>
-                <p className="text-xs text-zinc-500 font-medium">한 장의 사진을 선택하여 업로드합니다.</p>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => { if(window.confirm('전체 사진첩 데이터와 동기화하시겠습니까?')) autoSyncRef.current?.click(); }}
-              className="flex items-center gap-5 p-5 bg-zinc-800 rounded-3xl hover:bg-zinc-700 transition-all border border-zinc-700/50 group"
-            >
-              <div className="w-14 h-14 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-500 group-active:scale-90 transition-transform">
-                <i className="fas fa-sync-alt text-2xl"></i>
-              </div>
-              <div className="text-left">
-                <p className="font-black text-white text-base">자동 동기화 (Deep Sync)</p>
-                <p className="text-xs text-zinc-500 font-medium">여러 장의 사진을 한 번에 동기화합니다.</p>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => setShowUploadOptions(false)}
-              className="mt-4 py-4 text-zinc-500 font-black text-sm uppercase tracking-widest"
-            >
-              취소
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 동기화 오버레이 */}
-      {isSyncing && (
-        <div className="fixed inset-0 z-[400] bg-black/95 flex flex-col items-center justify-center backdrop-blur-2xl animate-fadeIn">
-          <div className="w-24 h-24 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-8 shadow-[0_0_50px_rgba(234,179,8,0.3)]"></div>
-          <p className="text-3xl font-black text-white italic animate-pulse tracking-tighter">DEEP SYNCING...</p>
-          <p className="text-[11px] text-zinc-500 mt-4 uppercase font-black tracking-[0.5em]">보안 망을 통한 데이터 동기화 최적화 중</p>
-        </div>
-      )}
-
-      {/* 미디어 라이브러리 모달 (관리자 전용) */}
-      {showMediaLibrary && isAdmin && (
-        <div className="fixed inset-0 z-[200] bg-black/98 flex items-center justify-center p-4 animate-fadeIn backdrop-blur-xl">
+      {/* 미디어 보관함 모달 */}
+      {showMediaLibrary && canAccessLibrary && (
+        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 animate-fadeIn backdrop-blur-xl">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-[3rem] p-7 flex flex-col max-h-[85vh] shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
               <i className="fas fa-shield-alt text-[150px] text-blue-500"></i>
             </div>
             
-            <div className="flex justify-between items-center mb-8 relative z-10">
+            <div className="flex justify-between items-center mb-6 relative z-10">
               <div className="flex flex-col">
-                <h3 className="text-xl font-black text-blue-400 italic uppercase leading-none">미디어 보관함</h3>
-                <span className="text-[9px] text-zinc-500 font-black mt-1 uppercase tracking-widest">관리자 보안 검수 시스템</span>
+                <h3 className="text-xl font-black text-yellow-400 italic uppercase leading-none">미디어 보관함</h3>
+                <span className="text-[9px] text-zinc-500 font-black mt-1 uppercase tracking-widest">사진 선택 및 관리</span>
               </div>
-              <button onClick={() => setShowMediaLibrary(false)} className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 active:scale-90 transition-transform"><i className="fas fa-times"></i></button>
+              <button onClick={() => setShowMediaLibrary(false)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 active:scale-90 transition-transform"><i className="fas fa-times"></i></button>
             </div>
+
+            {/* 사진 추가 버튼 (보관함 내부에 위치) */}
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="mb-6 w-full py-4 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-700 transition-all active:scale-95 group relative z-10"
+            >
+              <div className="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center text-yellow-500 group-hover:bg-yellow-500 group-hover:text-black transition-all">
+                <i className="fas fa-plus"></i>
+              </div>
+              <span className="text-xs font-black text-white uppercase">새 사진 추가하기</span>
+            </button>
             
             <div className="flex-1 overflow-y-auto grid grid-cols-3 gap-3 pr-1 custom-scrollbar relative z-10">
               {gallery.map((src, idx) => (
@@ -307,37 +265,43 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
                     onClick={() => { setImg(src); setShowMediaLibrary(false); }}
                     className="w-full h-full object-cover rounded-2xl border border-zinc-800 hover:border-yellow-500 cursor-pointer transition-all shadow-md"
                   />
-                  {/* 관리자 버튼: 삭제 및 다운로드 */}
-                  <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const newG = gallery.filter((_, i) => i !== idx);
-                        setGallery(newG);
-                        api.saveUser({ ...targetUser, gallery: newG }).then(() => onUpdateUser({ ...targetUser, gallery: newG }));
-                      }}
-                      className="w-7 h-7 bg-red-600 text-white rounded-lg text-[10px] shadow-lg flex items-center justify-center active:scale-90"
-                    >
-                      <i className="fas fa-trash-alt"></i>
-                    </button>
-                    <a 
-                      href={src} download={`media_${idx}.png`}
-                      onClick={e => e.stopPropagation()}
-                      className="w-7 h-7 bg-blue-600 text-white rounded-lg text-[10px] shadow-lg flex items-center justify-center active:scale-90"
-                    >
-                      <i className="fas fa-download"></i>
-                    </a>
-                  </div>
+                  {/* 본인의 사진이거나 관리자일 때만 삭제/다운로드 가능 */}
+                  {canEdit && (
+                    <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); removePhoto(idx); }}
+                        className="w-7 h-7 bg-red-600 text-white rounded-lg text-[10px] shadow-lg flex items-center justify-center active:scale-90"
+                      >
+                        <i className="fas fa-trash-alt"></i>
+                      </button>
+                      <a 
+                        href={src} download={`media_${idx}.png`}
+                        onClick={e => e.stopPropagation()}
+                        className="w-7 h-7 bg-blue-600 text-white rounded-lg text-[10px] shadow-lg flex items-center justify-center active:scale-90"
+                      >
+                        <i className="fas fa-download"></i>
+                      </a>
+                    </div>
+                  )}
                 </div>
               ))}
               {gallery.length === 0 && (
                 <div className="col-span-3 py-20 text-center opacity-20">
-                  <i className="fas fa-ghost text-4xl mb-2"></i>
-                  <p className="text-xs font-black uppercase">비어 있음</p>
+                  <i className="fas fa-images text-4xl mb-2"></i>
+                  <p className="text-xs font-black uppercase">보관함이 비어있습니다</p>
                 </div>
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 업로드 대기 화면 */}
+      {isUploading && (
+        <div className="fixed inset-0 z-[400] bg-black/90 flex flex-col items-center justify-center backdrop-blur-2xl animate-fadeIn">
+          <div className="w-20 h-20 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-8"></div>
+          <p className="text-2xl font-black text-white italic animate-pulse tracking-tighter uppercase">Syncing Photos...</p>
+          <p className="text-[10px] text-zinc-500 mt-4 uppercase font-black tracking-[0.5em]">보안 클라우드 데이터 전송 중</p>
         </div>
       )}
     </div>
