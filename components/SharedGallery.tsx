@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, SharedMedia } from '../types';
 import { api } from '../services/apiService';
+import { compressImage } from '../services/imageService';
 
 interface SharedGalleryProps {
   user: User;
@@ -22,30 +23,34 @@ const SharedGallery: React.FC<SharedGalleryProps> = ({ user }) => {
     });
   }, []);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files[0]) {
       const file = files[0];
-      if (file.size > 5 * 1024 * 1024) return alert('5MB 이하 파일만 업로드 가능합니다.');
-
       setIsUploading(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
+      
+      try {
+        // 전송 전 이미지 압축 (최대 1024px, 품질 0.7)
+        const compressedBase64 = await compressImage(file, 1024, 0.7);
+        
         const media: SharedMedia = {
           id: `media_${Date.now()}_${user.id}`,
           uploaderId: user.id,
           uploaderNick: user.nick || user.id,
-          data: base64,
+          data: compressedBase64,
           timestamp: Date.now(),
           type: file.type.startsWith('video') ? 'video' : 'image'
         };
         
         await api.uploadToSharedGallery(media);
         await api.logEvent(`🖼️ [${user.nick || user.id}]님이 전역 피드에 사진을 공유했습니다.`);
+      } catch (err) {
+        console.error(err);
+        alert('이미지 업로드 중 오류가 발생했습니다.');
+      } finally {
         setIsUploading(false);
-      };
-      reader.readAsDataURL(file);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     }
   };
 

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, DEFAULT_PROFILE_IMG } from '../types';
 import { api } from '../services/apiService';
+import { compressImage } from '../services/imageService';
 
 interface ProfileProps {
   user: User;
@@ -28,8 +29,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
   const [gallery, setGallery] = useState<string[]>([]);
   
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [zoomedImg, setZoomedImg] = useState<string | null>(null);
 
   useEffect(() => {
     if (targetUser) {
@@ -39,17 +42,17 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
       setImg(targetUser.img || DEFAULT_PROFILE_IMG);
       setBalance(targetUser.balance || 0);
       
+      let parsedGallery: string[] = [];
       if (typeof targetUser.gallery === 'string') {
-        try { setGallery(JSON.parse(targetUser.gallery)); } catch (e) { setGallery([]); }
+        try { parsedGallery = JSON.parse(targetUser.gallery); } catch (e) { parsedGallery = []; }
       } else if (Array.isArray(targetUser.gallery)) {
-        setGallery(targetUser.gallery);
-      } else {
-        setGallery([]);
+        parsedGallery = targetUser.gallery;
       }
+      setGallery(parsedGallery);
     }
   }, [targetUser]);
 
-  if (!targetUser) return <div className="p-10 text-center text-zinc-500 font-bold">사용자 정보를 찾을 수 없습니다.</div>;
+  if (!targetUser) return <div className="p-10 text-center text-zinc-500 font-bold">사용자를 찾을 수 없습니다.</div>;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -60,79 +63,69 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         balance: Number(balance), 
         gallery: gallery
       };
-      await api.saveUser(updatedData);
-      onUpdateUser(updatedData);
-      alert('변경 사항이 안전하게 저장되었습니다.');
+      // App.tsx의 onUpdateUser가 이미 api.saveUser를 호출하므로 여기서 중복 호출하지 않습니다.
+      await onUpdateUser(updatedData);
+      alert('설정이 성공적으로 반영되었습니다.');
     } catch (err) {
-      alert('저장에 실패했습니다. 네트워크 상태를 확인해주세요.');
+      console.error(err);
+      alert('저장 중 오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       setIsUploading(true);
-      const newItems: string[] = [];
-      let loaded = 0;
+      setUploadProgress('이미지 최적화 중...');
+      
+      try {
+        const compressedItems = await Promise.all(
+          Array.from(files).map(async (file, idx) => {
+            setUploadProgress(`최적화 (${idx + 1}/${files.length})`);
+            return await compressImage(file, 1024, 0.7);
+          })
+        );
 
-      Array.from(files).forEach((file: File) => {
-        if (file.size > 10 * 1024 * 1024) { // 10MB 제한
-          loaded++;
-          if (loaded === files.length && newItems.length === 0) setIsUploading(false);
-          return;
+        setUploadProgress('데이터 동기화 중...');
+        const updatedGallery = [...gallery, ...compressedItems];
+        setGallery(updatedGallery);
+        
+        // 본인 프로필일 경우 첫 번째 사진을 프로필로 즉시 적용
+        let newProfileImg = img;
+        if (isSelf && compressedItems[0]) {
+          newProfileImg = compressedItems[0];
+          setImg(newProfileImg);
         }
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          newItems.push(reader.result as string);
-          loaded++;
-          if (loaded === files.length) {
-            const updatedGallery = [...gallery, ...newItems];
-            setGallery(updatedGallery);
-            
-            // 본인 프로필일 경우 첫 번째 사진을 즉시 프로필로 설정
-            const newProfileImg = (isSelf && newItems[0]) ? newItems[0] : img;
-            if (isSelf && newItems[0]) setImg(newItems[0]);
 
-            const fastUpdate = { ...targetUser, gallery: updatedGallery, img: newProfileImg };
-            api.saveUser(fastUpdate).then(() => {
-              onUpdateUser(fastUpdate);
-              setIsUploading(false);
-              alert(`${newItems.length}개의 사진이 보관함에 추가되었습니다.`);
-            });
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+        const fastUpdate = { ...targetUser, gallery: updatedGallery, img: newProfileImg };
+        await onUpdateUser(fastUpdate);
+        alert(`${compressedItems.length}개의 사진이 추가되었습니다.`);
+      } catch (err) {
+        alert('업로드 중 오류가 발생했습니다.');
+      } finally {
+        setIsUploading(false);
+        setUploadProgress('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     }
   };
 
   const isAdmin = user.isAdmin;
   const canEdit = isSelf || isAdmin;
 
-  // 보관함 접근 권한 확인 (본인이거나 관리자여야 함)
-  const canAccessLibrary = isSelf || isAdmin;
-
-  const removePhoto = (idx: number) => {
-    if (!window.confirm('이 사진을 보관함에서 영구 삭제할까요?')) return;
+  const removePhoto = async (idx: number) => {
+    if (!window.confirm('이 사진을 보관함에서 영구 삭제하시겠습니까?')) return;
     const newG = gallery.filter((_, i) => i !== idx);
     setGallery(newG);
     const updatedUser = { ...targetUser, gallery: newG };
-    api.saveUser(updatedUser).then(() => onUpdateUser(updatedUser));
+    await onUpdateUser(updatedUser);
   };
 
   return (
     <div className="flex flex-col gap-6 animate-fadeIn pb-24 relative">
-      {/* 숨겨진 다중 파일 인풋 */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        className="hidden" 
-        multiple 
-        accept="image/*" 
-        onChange={handleFileUpload} 
-      />
+      <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
 
       <div className="flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 active:scale-90 transition-transform">
@@ -144,12 +137,14 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
 
       <div className="flex flex-col items-center gap-4 py-10 bg-gradient-to-br from-zinc-800/60 to-zinc-900/60 rounded-[3rem] border border-zinc-700/50 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-yellow-500/50 to-transparent"></div>
-        <div className="relative">
-          <div className="w-36 h-36 rounded-full border-4 border-yellow-500 overflow-hidden bg-zinc-700 shadow-[0_0_30px_rgba(234,179,8,0.2)]">
-            <img src={img} alt="P" className="w-full h-full object-cover" />
+        <div className="relative group">
+          <div 
+            onClick={() => setZoomedImg(img)}
+            className="w-36 h-36 rounded-full border-4 border-yellow-500 overflow-hidden bg-zinc-700 shadow-[0_0_30px_rgba(234,179,8,0.2)] cursor-zoom-in active:scale-95 transition-transform"
+          >
+            <img src={img} alt="Profile" className="w-full h-full object-cover" />
           </div>
-          {/* 카메라 아이콘: 누르면 보관함 열림 */}
-          {canAccessLibrary && (
+          {canEdit && (
             <button 
               onClick={() => setShowMediaLibrary(true)}
               className="absolute bottom-1 right-1 w-11 h-11 bg-yellow-500 rounded-full flex items-center justify-center shadow-xl border-4 border-zinc-900 active:scale-90 transition-transform z-20"
@@ -230,8 +225,18 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         </div>
       )}
 
+      {/* 이미지 확대 모달 */}
+      {zoomedImg && (
+        <div className="fixed inset-0 z-[500] bg-black/95 flex items-center justify-center p-4 animate-fadeIn" onClick={() => setZoomedImg(null)}>
+          <div className="relative max-w-full max-h-full">
+            <img src={zoomedImg} alt="Zoomed" className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl border border-zinc-800" />
+            <button className="absolute -top-12 right-0 text-white text-3xl p-2"><i className="fas fa-times"></i></button>
+          </div>
+        </div>
+      )}
+
       {/* 미디어 보관함 모달 */}
-      {showMediaLibrary && canAccessLibrary && (
+      {showMediaLibrary && (
         <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 animate-fadeIn backdrop-blur-xl">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-[3rem] p-7 flex flex-col max-h-[85vh] shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
@@ -246,26 +251,28 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
               <button onClick={() => setShowMediaLibrary(false)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 active:scale-90 transition-transform"><i className="fas fa-times"></i></button>
             </div>
 
-            {/* 사진 추가 버튼 (보관함 내부에 위치) */}
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="mb-6 w-full py-4 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-700 transition-all active:scale-95 group relative z-10"
-            >
-              <div className="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center text-yellow-500 group-hover:bg-yellow-500 group-hover:text-black transition-all">
-                <i className="fas fa-plus"></i>
-              </div>
-              <span className="text-xs font-black text-white uppercase">새 사진 추가하기</span>
-            </button>
+            {/* 업로드 버튼은 본인 혹은 관리자일 때만 노출 */}
+            {canEdit && (
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="mb-6 w-full py-4 bg-zinc-800 border border-zinc-700 rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-700 transition-all active:scale-95 group relative z-10"
+              >
+                <div className="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center text-yellow-500 group-hover:bg-yellow-500 group-hover:text-black transition-all">
+                  <i className="fas fa-plus"></i>
+                </div>
+                <span className="text-xs font-black text-white uppercase">새 사진 추가하기</span>
+              </button>
+            )}
             
             <div className="flex-1 overflow-y-auto grid grid-cols-3 gap-3 pr-1 custom-scrollbar relative z-10">
               {gallery.map((src, idx) => (
                 <div key={idx} className="aspect-square relative group">
                   <img 
                     src={src} alt="" 
-                    onClick={() => { setImg(src); setShowMediaLibrary(false); }}
+                    onClick={() => { if(canEdit) setImg(src); setShowMediaLibrary(false); }}
                     className="w-full h-full object-cover rounded-2xl border border-zinc-800 hover:border-yellow-500 cursor-pointer transition-all shadow-md"
                   />
-                  {/* 본인의 사진이거나 관리자일 때만 삭제/다운로드 가능 */}
+                  {/* 삭제/다운로드 버튼은 철저히 권한 제어 (본인 혹은 관리자) */}
                   {canEdit && (
                     <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
@@ -296,12 +303,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onDeleteUser, onL
         </div>
       )}
 
-      {/* 업로드 대기 화면 */}
       {isUploading && (
         <div className="fixed inset-0 z-[400] bg-black/90 flex flex-col items-center justify-center backdrop-blur-2xl animate-fadeIn">
           <div className="w-20 h-20 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-8"></div>
-          <p className="text-2xl font-black text-white italic animate-pulse tracking-tighter uppercase">Syncing Photos...</p>
-          <p className="text-[10px] text-zinc-500 mt-4 uppercase font-black tracking-[0.5em]">보안 클라우드 데이터 전송 중</p>
+          <p className="text-2xl font-black text-white italic animate-pulse tracking-tighter uppercase">{uploadProgress || 'Processing...'}</p>
+          <p className="text-[10px] text-zinc-500 mt-4 uppercase font-black tracking-[0.5em]">이미지 최적화 및 보안 전송 중</p>
         </div>
       )}
     </div>
