@@ -1,9 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, SLOT_SYMBOLS } from '../types';
 import { api } from '../services/apiService';
-// Gemini API 서비스를 임포트합니다.
-import { getAILuckProphecy } from '../services/geminiService';
 
 interface SlotMachineProps {
   user: User;
@@ -27,26 +25,20 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinningReels, setSpinningReels] = useState<boolean[]>([false, false, false, false, false]);
   const [gameLog, setGameLog] = useState<{ msg: string; color: string }>({ msg: '배팅 금액을 정하고 레버를 당기세요!', color: 'text-zinc-400' });
-  const [prophecy, setProphecy] = useState<string>('운명을 탐색 중입니다...');
-  const [liveActivity, setLiveActivity] = useState<string>("서버에 연결 중...");
+  const [prophecy, setProphecy] = useState<string>('');
+  const [liveActivity, setLiveActivity] = useState<string>("네트워크 연결 확인 중...");
+
+  const updateFortune = useCallback(() => {
+    const randomFortune = LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)];
+    setProphecy(randomFortune);
+  }, []);
 
   useEffect(() => {
-    // Gemini API를 사용하여 예언을 가져옵니다.
-    const fetchProphecy = async () => {
-      try {
-        const p = await getAILuckProphecy();
-        setProphecy(p);
-      } catch (err) {
-        const randomFortune = LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)];
-        setProphecy(randomFortune);
-      }
-    };
-    fetchProphecy();
-
+    updateFortune();
     api.subscribeEvents((newEvent) => {
       setLiveActivity(newEvent);
     });
-  }, [user.id]);
+  }, [user.id, updateFortune]);
 
   const spin = async () => {
     if (isSpinning) return;
@@ -89,10 +81,7 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
 
     await calculateResult(finalResults);
     setIsSpinning(false);
-    // 스핀 후 새로운 포춘 갱신 (Gemini API 호출)
-    getAILuckProphecy().then(setProphecy).catch(() => {
-      setProphecy(LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)]);
-    });
+    updateFortune();
   };
 
   const calculateResult = async (results: string[]) => {
@@ -151,7 +140,7 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
         </div>
         <div className="flex items-center gap-2 mb-2">
           <i className="fas fa-magic text-yellow-400 text-[10px]"></i>
-          <span className="text-[10px] font-black text-yellow-400 uppercase tracking-tighter">행운의 전언</span>
+          <span className="text-[10px] font-black text-yellow-400 uppercase tracking-tighter">오늘의 전언</span>
         </div>
         <p className="text-sm italic font-medium leading-tight text-zinc-100 pr-2 relative z-10">
           "{prophecy}"
