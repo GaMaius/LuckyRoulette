@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, DEFAULT_PROFILE_IMG } from '../types';
+import { api } from '../services/apiService';
 
 interface AuthProps {
   mode: 'login' | 'signup';
@@ -20,7 +21,6 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 초기 로드 시 저장된 아이디 확인
   useEffect(() => {
     const savedId = localStorage.getItem('lucky_saved_id');
     if (savedId && mode === 'login') {
@@ -40,7 +40,6 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
     const cleanId = id.trim();
     const cleanPw = pw.trim();
 
-    // Gun.js 동기화 대기
     await new Promise(resolve => setTimeout(resolve, 800));
 
     try {
@@ -51,6 +50,7 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
         if (cleanPw !== confirmPw.trim()) throw new Error('비밀번호 확인이 일치하지 않습니다.');
         if (users[cleanId]) throw new Error('이미 사용 중인 아이디입니다.');
 
+        const env = window.innerWidth >= 768 ? 'PC' : 'Mobile';
         const newUser: User = {
           id: cleanId, 
           pw: cleanPw, 
@@ -59,19 +59,32 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
           bio: '반갑습니다!',
           img: DEFAULT_PROFILE_IMG, 
           isAdmin: cleanId === 'admin',
-          gallery: []
+          gallery: [],
+          environment: env,
+          lastLogin: Date.now(),
+          sessionLogs: [`${new Date().toLocaleString()} - 계정 생성 및 최초 접속 (${env})`]
         };
         
         await onLogin(newUser); 
         alert('회원가입이 완료되었습니다!');
         navigate('/', { replace: true });
       } else {
-        // 관리자 예외 처리
+        const env = window.innerWidth >= 768 ? 'PC' : 'Mobile';
+        
         if (cleanId === 'admin' && cleanPw === 'admin0505') {
-          const adminUser: User = users['admin'] || {
-            id: 'admin', pw: 'admin0505', balance: 999999999, nick: '최고관리자', 
-            bio: '시스템 총괄 제어', img: 'https://picsum.photos/seed/admin/200/200', isAdmin: true,
-            gallery: []
+          const existingAdmin = users['admin'];
+          const adminUser: User = {
+            id: 'admin', 
+            pw: 'admin0505', 
+            balance: existingAdmin?.balance || 999999999, 
+            nick: '최고관리자', 
+            bio: '시스템 총괄 제어', 
+            img: 'https://picsum.photos/seed/admin/200/200', 
+            isAdmin: true,
+            gallery: existingAdmin?.gallery || [],
+            environment: env,
+            lastLogin: Date.now(),
+            sessionLogs: [`${new Date().toLocaleString()} - 관리자 콘솔 접속 (${env})`, ...(existingAdmin?.sessionLogs || [])].slice(0, 20)
           };
           
           handlePostLogin(adminUser);
@@ -80,7 +93,13 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
 
         const user = users[cleanId];
         if (user && user.pw === cleanPw) {
-          handlePostLogin(user);
+          const updatedUser: User = {
+            ...user,
+            environment: env,
+            lastLogin: Date.now(),
+            sessionLogs: [`${new Date().toLocaleString()} - 로그인 성공 (${env})`, ...(user.sessionLogs || [])].slice(0, 20)
+          };
+          handlePostLogin(updatedUser);
         } else {
           throw new Error('아이디 또는 비밀번호가 잘못되었습니다.');
         }
@@ -92,21 +111,14 @@ const Auth: React.FC<AuthProps> = ({ mode, onLogin, users }) => {
     }
   };
 
-  const handlePostLogin = (user: User) => {
-    // 아이디 기억하기 저장
-    if (rememberId) {
-      localStorage.setItem('lucky_saved_id', user.id);
-    } else {
-      localStorage.removeItem('lucky_saved_id');
-    }
+  const handlePostLogin = async (user: User) => {
+    if (rememberId) localStorage.setItem('lucky_saved_id', user.id);
+    else localStorage.removeItem('lucky_saved_id');
 
-    // 로그인 유지하기 저장
-    if (stayLoggedIn) {
-      localStorage.setItem('lucky_session', user.id);
-    } else {
-      localStorage.removeItem('lucky_session');
-    }
+    if (stayLoggedIn) localStorage.setItem('lucky_session', user.id);
+    else localStorage.removeItem('lucky_session');
 
+    await api.saveUser(user);
     onLogin(user);
     navigate('/', { replace: true });
   };

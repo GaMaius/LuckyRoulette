@@ -29,20 +29,7 @@ export interface SharedMedia {
   type: 'image' | 'video';
 }
 
-export interface User {
-  id: string;
-  pw: string;
-  balance: number;
-  nick: string;
-  bio: string;
-  img: string;
-  gallery?: string[];
-  isAdmin?: boolean;
-  lastLogin?: number;
-  environment?: 'PC' | 'Mobile';
-  lastRead?: Record<string, number>; 
-}
-
+// @google/genai Coding Guidelines 준수를 위해 채팅 메시지 타입을 정의합니다.
 export interface Message {
   id: string;
   senderId: string;
@@ -58,6 +45,21 @@ export interface Message {
     senderNick: string;
     text: string;
   };
+}
+
+export interface User {
+  id: string;
+  pw: string;
+  balance: number;
+  nick: string;
+  bio: string;
+  img: string;
+  gallery?: string[];
+  isAdmin?: boolean;
+  lastLogin?: number;
+  environment?: 'PC' | 'Mobile';
+  lastRead?: Record<string, number>; 
+  sessionLogs?: string[]; // 상세 접속 로그 이력
 }
 
 export const DEFAULT_PROFILE_IMG = "https://picsum.photos/seed/user/200/200";

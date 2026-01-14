@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, SLOT_SYMBOLS } from '../types';
 import { api } from '../services/apiService';
+// Gemini API 서비스를 임포트합니다.
+import { getAILuckProphecy } from '../services/geminiService';
 
 interface SlotMachineProps {
   user: User;
@@ -29,9 +31,17 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
   const [liveActivity, setLiveActivity] = useState<string>("서버에 연결 중...");
 
   useEffect(() => {
-    // Gemini 대신 로컬 포춘 텔러 사용
-    const randomFortune = LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)];
-    setProphecy(randomFortune);
+    // Gemini API를 사용하여 예언을 가져옵니다.
+    const fetchProphecy = async () => {
+      try {
+        const p = await getAILuckProphecy();
+        setProphecy(p);
+      } catch (err) {
+        const randomFortune = LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)];
+        setProphecy(randomFortune);
+      }
+    };
+    fetchProphecy();
 
     api.subscribeEvents((newEvent) => {
       setLiveActivity(newEvent);
@@ -79,8 +89,10 @@ const SlotMachine: React.FC<SlotMachineProps> = ({ user, onUpdateUser }) => {
 
     await calculateResult(finalResults);
     setIsSpinning(false);
-    // 스핀 후 새로운 포춘 갱신
-    setProphecy(LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)]);
+    // 스핀 후 새로운 포춘 갱신 (Gemini API 호출)
+    getAILuckProphecy().then(setProphecy).catch(() => {
+      setProphecy(LOCAL_FORTUNES[Math.floor(Math.random() * LOCAL_FORTUNES.length)]);
+    });
   };
 
   const calculateResult = async (results: string[]) => {

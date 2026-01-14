@@ -17,7 +17,7 @@ let connectedPeers: Set<string> = new Set();
 let statusCallback: ((count: number) => void) | null = null;
 
 class ApiService {
-  private dbName = 'lucky-strike-v109-final'; // 피드 초기화를 위해 노드 이름 변경
+  private dbName = 'lucky-strike-v110-final'; // 필드 추가로 인한 초기화
 
   async init(): Promise<void> {
     if (gunInstance) return;
@@ -81,10 +81,11 @@ class ApiService {
           if (typeof user.lastRead === 'string') {
             try { user.lastRead = JSON.parse(user.lastRead); } catch (e) { user.lastRead = {}; }
           }
+          if (typeof user.sessionLogs === 'string') {
+            try { user.sessionLogs = JSON.parse(user.sessionLogs); } catch (e) { user.sessionLogs = []; }
+          }
           callback({ [id]: user as User });
         }
-      } else if (data === null) {
-        // 유저 삭제 대응 (로컬 상태 반영은 App.tsx에서 처리)
       }
     });
   }
@@ -93,7 +94,8 @@ class ApiService {
     const dataToSave = this.sanitize({
       ...user,
       gallery: Array.isArray(user.gallery) ? JSON.stringify(user.gallery) : (user.gallery || "[]"),
-      lastRead: (user.lastRead && typeof user.lastRead === 'object') ? JSON.stringify(user.lastRead) : (user.lastRead || "{}")
+      lastRead: (user.lastRead && typeof user.lastRead === 'object') ? JSON.stringify(user.lastRead) : (user.lastRead || "{}"),
+      sessionLogs: Array.isArray(user.sessionLogs) ? JSON.stringify(user.sessionLogs) : (user.sessionLogs || "[]")
     });
     return new Promise((resolve, reject) => {
       this.nodes.users.get(user.id).put(dataToSave, (ack: any) => {
@@ -164,7 +166,6 @@ class ApiService {
     this.nodes.messages.get(msgId).get('text').put('삭제된 메시지입니다.');
   }
 
-  // Subscribe to real-time events for the live activity feed
   subscribeEvents(callback: (event: string) => void) {
     this.nodes.events.map().on((data: any) => {
       if (data && typeof data === 'string') {
@@ -177,7 +178,6 @@ class ApiService {
     this.nodes.events.set(message);
   }
 
-  // Subscribe to the shared gallery for global media sharing
   subscribeSharedGallery(callback: (item: SharedMedia) => void) {
     this.nodes.sharedGallery.map().on((data: any) => {
       if (data && data.id) {
@@ -187,7 +187,6 @@ class ApiService {
     });
   }
 
-  // Upload a new media item to the shared gallery
   async uploadToSharedGallery(media: SharedMedia): Promise<void> {
     const data = this.sanitize(media);
     return new Promise((resolve, reject) => {
@@ -201,7 +200,6 @@ class ApiService {
   async deleteUser(userId: string): Promise<void> {
     return new Promise((resolve) => {
       this.nodes.users.get(userId).put(null as any, () => {
-        // 계정 연관 데이터들 정리 (선택 사항)
         resolve();
       });
     });
