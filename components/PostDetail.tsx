@@ -1,12 +1,12 @@
 
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, memo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Post, Comment } from '../types';
 import { api } from '../services/apiService';
+import { compressImage } from '../services/imageService';
 
 /**
  * 답글 입력을 처리하는 독립 컴포넌트
- * 외부 정의로 리렌더링 시 참조가 변하지 않아 IME 오류를 원천 차단합니다.
  */
 interface ReplyInputProps {
   placeholder: string;
@@ -129,10 +129,59 @@ const CommentItem = memo(({
 const PostDetail: React.FC<{ user: User; posts: Post[] }> = ({ user, posts }) => {
   const { postId } = useParams();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [mainCommentText, setMainCommentText] = useState('');
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
 
+  // 수정 관련 상태
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editImg, setEditImg] = useState<string | null>(null);
+  const [isEditNotice, setIsEditNotice] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
   const post = useMemo(() => posts.find(p => p.id === postId), [posts, postId]);
+
+  const handleOpenEdit = () => {
+    if (!post) return;
+    setEditTitle(post.title);
+    setEditContent(post.content);
+    setEditImg(post.img || null);
+    setIsEditNotice(post.isNotice || false);
+    setShowEditModal(true);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const base64 = await compressImage(file, 1200, 0.8);
+      setEditImg(base64);
+    } catch (err) {
+      alert('이미지 처리 중 오류 발생');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleUpdatePost = async () => {
+    if (!post || !editTitle.trim() || !editContent.trim()) return;
+    
+    const updatedPost: Post = {
+      ...post,
+      title: editTitle,
+      content: editContent,
+      img: editImg || undefined,
+      isNotice: user.isAdmin ? isEditNotice : (post.isNotice || false)
+    };
+
+    await api.savePost(updatedPost);
+    alert('수정이 완료되었습니다.');
+    setShowEditModal(false);
+  };
 
   const handleAddComment = useCallback(async (parentId?: string, text?: string) => {
     const finalContent = text || mainCommentText;
@@ -208,11 +257,18 @@ const PostDetail: React.FC<{ user: User; posts: Post[] }> = ({ user, posts }) =>
           <i className="fas fa-chevron-left"></i>
         </button>
         <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest italic truncate px-2">Post View</span>
-        {(user.isAdmin || user.id === post.uploaderId) ? (
-          <button onClick={handleDeletePost} className="w-10 h-10 rounded-xl bg-red-900/10 text-red-500 flex items-center justify-center border border-red-500/10">
-            <i className="fas fa-trash-alt text-xs"></i>
-          </button>
-        ) : <div className="w-10"></div>}
+        <div className="flex gap-2">
+          {(user.isAdmin || user.id === post.uploaderId) && (
+            <>
+              <button onClick={handleOpenEdit} className="w-10 h-10 rounded-xl bg-zinc-800 text-yellow-500 flex items-center justify-center border border-yellow-500/10 active:scale-90 transition-transform">
+                <i className="fas fa-edit text-xs"></i>
+              </button>
+              <button onClick={handleDeletePost} className="w-10 h-10 rounded-xl bg-red-900/10 text-red-500 flex items-center justify-center border border-red-500/10 active:scale-90 transition-transform">
+                <i className="fas fa-trash-alt text-xs"></i>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="bg-zinc-900/40 rounded-[2.5rem] border border-zinc-800/80 p-6 sm:p-8 shadow-2xl relative overflow-hidden mx-2">
@@ -291,6 +347,36 @@ const PostDetail: React.FC<{ user: User; posts: Post[] }> = ({ user, posts }) =>
               <i className="fas fa-paper-plane text-xl"></i>
             </button>
           </form>
+        </div>
+      )}
+
+      {/* 수정 모달 */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-[3rem] p-8 flex flex-col gap-6 shadow-2xl">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-black italic text-yellow-400 uppercase">게시글 수정</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-zinc-500"><i className="fas fa-times text-xl"></i></button>
+            </div>
+            <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="제목" className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white outline-none focus:border-yellow-500" />
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} placeholder="내용" className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-6 font-bold text-white outline-none focus:border-yellow-500 min-h-[200px] resize-none" />
+            <div className="flex items-center gap-4">
+              <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-zinc-800 rounded-xl text-[10px] font-black text-zinc-400 flex items-center gap-2">
+                <i className="fas fa-image"></i> {editImg ? '사진 변경' : '사진 추가'}
+              </button>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+              {user.isAdmin && <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={isEditNotice} onChange={e => setIsEditNotice(e.target.checked)} className="accent-yellow-500" /><span className="text-[10px] font-black text-yellow-500">공지 설정</span></label>}
+            </div>
+            {editImg && (
+              <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-800">
+                <img src={editImg} className="w-full h-full object-cover" alt="Preview" />
+                <button onClick={() => setEditImg(null)} className="absolute top-1 right-1 w-5 h-5 bg-black/50 text-white rounded-full text-[10px]"><i className="fas fa-times"></i></button>
+              </div>
+            )}
+            <button onClick={handleUpdatePost} disabled={isUploading} className="w-full py-5 bg-yellow-500 text-black font-black rounded-2xl shadow-xl active:scale-95 transition-all">
+              수정 완료
+            </button>
+          </div>
         </div>
       )}
     </div>
