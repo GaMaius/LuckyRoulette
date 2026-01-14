@@ -78,13 +78,13 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
 
   const handleContextMenu = (e: React.MouseEvent, msg: Message) => {
     e.preventDefault();
-    const menuWidth = 128;
-    const menuHeight = 80;
+    const menuWidth = 140;
+    const menuHeight = 100;
     let x = e.clientX;
     let y = e.clientY;
 
-    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
+    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 20;
+    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 20;
 
     setContextMenu({ x, y, msg });
   };
@@ -105,12 +105,12 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
     return (
       <div onClick={() => { navigate(isGlobal ? '/chat' : `/chat/${id}`); setShowUserList(false); }}
         className={`flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all ${isActive ? 'bg-yellow-500/10 border border-yellow-500/20' : 'hover:bg-zinc-800/50'}`}>
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           {isGlobal ? <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700"><i className="fas fa-globe-asia text-yellow-500"></i></div> 
                    : <img src={img || DEFAULT_PROFILE_IMG} className="w-10 h-10 rounded-full object-cover" alt="" />}
           {unread > 0 && <div className="absolute -top-1 -right-1 bg-red-600 text-[8px] text-white font-black px-1.5 py-0.5 rounded-full border-2 border-zinc-900">{unread > 9 ? '9+' : unread}</div>}
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-w-0">
           <p className={`text-xs font-black truncate ${isActive ? 'text-yellow-500' : 'text-zinc-300'}`}>{label}</p>
           <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest">{isGlobal ? 'Channel' : 'Direct'}</p>
         </div>
@@ -119,7 +119,7 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
   };
 
   return (
-    <div className="flex h-full gap-4 relative" onClick={() => setContextMenu(null)}>
+    <div className="flex h-full gap-4 relative overflow-hidden" onClick={() => setContextMenu(null)}>
       <div className={`fixed inset-0 z-[200] lg:relative lg:z-0 lg:flex lg:w-72 flex-col bg-zinc-950/95 lg:bg-transparent backdrop-blur-xl lg:backdrop-blur-none transition-transform duration-300 ${showUserList ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex flex-col h-full bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800 p-5 shadow-2xl">
           <div className="flex justify-between items-center mb-6">
@@ -134,22 +134,21 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex items-center justify-between mb-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 p-3">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowUserList(true)} className="lg:hidden w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-yellow-500"><i className="fas fa-bars"></i></button>
-            <p className="text-xs font-black text-white italic uppercase tracking-tight">{chatType === 'global' ? '🌍 글로벌 광장' : `👤 ${usersRecord[targetId!]?.nick}님`}</p>
+      <div className="flex-1 flex flex-col min-w-0 max-w-full">
+        <div className="flex items-center justify-between mb-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 p-3 flex-shrink-0">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <button onClick={() => setShowUserList(true)} className="lg:hidden w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-yellow-500 flex-shrink-0"><i className="fas fa-bars"></i></button>
+            <p className="text-xs font-black text-white italic uppercase tracking-tight truncate">{chatType === 'global' ? '🌍 글로벌 광장' : `👤 ${usersRecord[targetId!]?.nick}님`}</p>
           </div>
-          <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+          <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)] flex-shrink-0"></div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar px-1">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar px-1 min-h-0">
           {filteredMessages.map((m, index) => {
             const isMe = m.senderId === user.id;
             const unreadCount = chatType === 'global' ? getGlobalUnreadCount(m) : getDMUnread(m);
             const isHighlighted = highlightedMsgId === m.id;
 
-            // 날짜 구분선 로직
             const prevMsg = filteredMessages[index - 1];
             const currentDate = new Date(m.timestamp).toLocaleDateString();
             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toLocaleDateString() : null;
@@ -158,13 +157,11 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
             return (
               <React.Fragment key={m.id}>
                 {isNewDay && (
-                  <div className="flex justify-center my-8 animate-fadeIn">
-                    <div className="bg-zinc-800/40 backdrop-blur-sm px-6 py-1.5 rounded-full border border-zinc-700/30 shadow-sm flex items-center gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
-                      <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">
+                  <div className="flex justify-center my-6 animate-fadeIn">
+                    <div className="bg-zinc-800/40 backdrop-blur-sm px-5 py-1.5 rounded-full border border-zinc-700/30 shadow-sm flex items-center gap-2">
+                      <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest text-center">
                         {new Date(m.timestamp).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
                       </span>
-                      <div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div>
                     </div>
                   </div>
                 )}
@@ -174,25 +171,25 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
                     <img 
                       src={usersRecord[m.senderId]?.img || m.senderImg} 
                       onClick={() => navigate(`/profile/${m.senderId}`)}
-                      className="w-8 h-8 rounded-full border border-zinc-800 object-cover mt-1 cursor-pointer active:scale-90 transition-transform" alt="" 
+                      className="w-8 h-8 rounded-full border border-zinc-800 object-cover mt-1 cursor-pointer active:scale-90 transition-transform flex-shrink-0" alt="" 
                     />
                   )}
-                  <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[80%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                     {!isMe && <span className="text-[9px] font-black text-zinc-500 ml-1 mb-0.5">{m.senderNick}</span>}
                     
                     {m.replyTo && (
-                      <div onClick={() => scrollToMessage(m.replyTo!.id)} className={`mb-1 px-3 py-1.5 rounded-xl bg-zinc-800/80 border-l-4 border-yellow-500/50 text-[10px] text-zinc-500 cursor-pointer hover:bg-zinc-700 transition-colors ${isMe ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
-                        <p className="font-black text-yellow-500/50">@{m.replyTo.senderNick}</p>
+                      <div onClick={() => scrollToMessage(m.replyTo!.id)} className={`mb-1 px-3 py-1.5 rounded-xl bg-zinc-800/80 border-l-4 border-yellow-500/50 text-[10px] text-zinc-500 cursor-pointer hover:bg-zinc-700 transition-colors max-w-full ${isMe ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
+                        <p className="font-black text-yellow-500/50 text-[8px]">@{m.replyTo.senderNick}</p>
                         <p className="truncate italic">{m.replyTo.text}</p>
                       </div>
                     )}
 
-                    <div className="flex items-end gap-1.5">
-                      {isMe && unreadCount !== null && <span className="text-[9px] font-black text-yellow-500 mb-1">{unreadCount}</span>}
-                      <div className={`px-4 py-2.5 rounded-[1.25rem] text-[13px] font-bold shadow-md break-all ${isMe ? 'bg-yellow-500 text-black rounded-tr-none' : 'bg-zinc-800 text-zinc-100 rounded-tl-none border border-zinc-700/50'} ${m.isDeleted ? 'opacity-40 italic' : ''}`}>
+                    <div className="flex items-end gap-1.5 max-w-full">
+                      {isMe && unreadCount !== null && <span className="text-[9px] font-black text-yellow-500 mb-1 flex-shrink-0">{unreadCount}</span>}
+                      <div className={`px-4 py-2.5 rounded-[1.25rem] text-[13px] font-bold shadow-md break-all overflow-hidden ${isMe ? 'bg-yellow-500 text-black rounded-tr-none' : 'bg-zinc-800 text-zinc-100 rounded-tl-none border border-zinc-700/50'} ${m.isDeleted ? 'opacity-40 italic' : ''}`}>
                         {m.text}
                       </div>
-                      {!isMe && unreadCount !== null && <span className="text-[9px] font-black text-yellow-500 mb-1">{unreadCount}</span>}
+                      {!isMe && unreadCount !== null && <span className="text-[9px] font-black text-yellow-500 mb-1 flex-shrink-0">{unreadCount}</span>}
                     </div>
                     <span className="text-[7px] text-zinc-700 font-bold uppercase mt-1 px-1">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
@@ -202,30 +199,38 @@ const Chat: React.FC<ChatProps> = ({ user, usersRecord, messages, onSendMessage,
           })}
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex-shrink-0 px-1">
           {replyTarget && (
-            <div className="bg-zinc-800/80 p-3 rounded-t-2xl border-x border-t border-zinc-700 flex justify-between items-center animate-slideUp">
-              <div>
-                <p className="text-[10px] font-black text-yellow-500">@{replyTarget.senderNick} 답장 중</p>
-                <p className="text-[10px] text-zinc-500 truncate">{replyTarget.text}</p>
+            <div className="bg-zinc-800/80 p-2 rounded-t-2xl border-x border-t border-zinc-700 flex justify-between items-center animate-slideUp">
+              <div className="overflow-hidden">
+                <p className="text-[9px] font-black text-yellow-500 truncate">@{replyTarget.senderNick}님에게 답장 중</p>
+                <p className="text-[9px] text-zinc-500 truncate italic">"{replyTarget.text}"</p>
               </div>
-              <button onClick={() => setReplyTarget(null)} className="text-zinc-500"><i className="fas fa-times"></i></button>
+              <button onClick={() => setReplyTarget(null)} className="text-zinc-500 p-2 flex-shrink-0"><i className="fas fa-times text-xs"></i></button>
             </div>
           )}
-          <form onSubmit={handleSend} className={`flex gap-2 p-1 bg-zinc-900 border border-zinc-800 ${replyTarget ? 'rounded-b-2xl border-t-0' : 'rounded-2xl shadow-xl'}`}>
-            <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="메시지를 입력하세요..." className="flex-1 bg-transparent px-5 py-4 text-sm font-bold text-white outline-none" />
-            <button type="submit" className="w-20 h-12 bg-yellow-500 text-black rounded-xl active:scale-95 transition-all flex items-center justify-center">
-              <i className="fas fa-paper-plane mr-2"></i>
-              <span className="text-[10px] font-black uppercase">Send</span>
+          <form onSubmit={handleSend} className={`flex items-center gap-1.5 p-1.5 bg-zinc-900 border border-zinc-800 ${replyTarget ? 'rounded-b-2xl border-t-0' : 'rounded-2xl shadow-xl'}`}>
+            <input 
+              type="text" 
+              value={inputText} 
+              onChange={e => setInputText(e.target.value)} 
+              placeholder="메시지 입력..." 
+              className="flex-1 bg-transparent px-4 py-3 text-sm font-bold text-white outline-none min-w-0" 
+            />
+            <button 
+              type="submit" 
+              className="w-14 h-12 flex-shrink-0 bg-yellow-500 text-black rounded-xl active:scale-95 transition-all flex items-center justify-center shadow-lg"
+            >
+              <i className="fas fa-paper-plane text-lg"></i>
             </button>
           </form>
         </div>
       </div>
 
       {contextMenu && (
-        <div className="fixed z-[1000] bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl p-1 w-32 animate-fadeIn" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          <button onClick={() => { setReplyTarget(contextMenu.msg); setContextMenu(null); }} className="w-full text-left px-4 py-2 text-xs font-black text-yellow-500 hover:bg-yellow-500/10 rounded-lg">답장하기</button>
-          {contextMenu.msg.senderId === user.id && <button onClick={() => { api.deleteMessage(contextMenu.msg.id); setContextMenu(null); }} className="w-full text-left px-4 py-2 text-xs font-black text-red-500 hover:bg-red-500/10 rounded-lg">삭제하기</button>}
+        <div className="fixed z-[1000] bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl p-1 w-32 animate-fadeIn flex flex-col" style={{ top: contextMenu.y, left: contextMenu.x }}>
+          <button onClick={() => { setReplyTarget(contextMenu.msg); setContextMenu(null); }} className="w-full text-left px-3 py-2 text-[10px] font-black text-zinc-300 hover:bg-yellow-500 hover:text-black rounded-lg transition-colors">답장하기</button>
+          {contextMenu.msg.senderId === user.id && <button onClick={() => { api.deleteMessage(contextMenu.msg.id); setContextMenu(null); }} className="w-full text-left px-3 py-2 text-[10px] font-black text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">삭제하기</button>}
         </div>
       )}
     </div>
