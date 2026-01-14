@@ -55,6 +55,12 @@ const Board: React.FC<BoardProps> = ({ user, posts }) => {
     setTitle(''); setContent(''); setImg(null); setShowModal(false);
   };
 
+  const handleDeletePost = async (e: React.MouseEvent, postId: string) => {
+    e.stopPropagation();
+    if (!window.confirm('정말 이 게시글을 삭제하시겠습니까?')) return;
+    await api.deletePost(postId);
+  };
+
   return (
     <div className="flex flex-col gap-6 animate-fadeIn pb-24">
       <div className="flex justify-between items-center bg-zinc-900/50 p-6 rounded-[2.5rem] border border-zinc-800 shadow-xl">
@@ -68,12 +74,22 @@ const Board: React.FC<BoardProps> = ({ user, posts }) => {
       <div className="grid gap-3">
         {sortedPosts.map((post) => (
           <div key={post.id} onClick={() => navigate(`/feed/${post.id}`)} 
-               className={`p-5 rounded-2xl border transition-all cursor-pointer active:scale-95 group ${post.isNotice ? 'bg-yellow-500/5 border-yellow-500/30' : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'}`}>
+               className={`p-5 rounded-2xl border transition-all cursor-pointer active:scale-95 group relative ${post.isNotice ? 'bg-yellow-500/5 border-yellow-500/30' : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'}`}>
             <div className="flex items-center gap-2 mb-2">
               {post.isNotice && <span className="bg-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded">NOTICE</span>}
               <span className="text-[9px] text-zinc-500 font-black uppercase">{new Date(post.timestamp).toLocaleDateString()}</span>
             </div>
             <h3 className={`text-sm font-black mb-1 group-hover:text-yellow-500 transition-colors ${post.isNotice ? 'text-yellow-500' : 'text-zinc-100'}`}>{post.title}</h3>
+            
+            {(user.isAdmin || user.id === post.uploaderId) && (
+              <button 
+                onClick={(e) => handleDeletePost(e, post.id)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-zinc-800 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+              >
+                <i className="fas fa-trash-alt text-[10px]"></i>
+              </button>
+            )}
+
             <div className="flex items-center justify-between mt-3">
               <span className="text-[10px] text-zinc-500 font-bold">{post.uploaderNick}</span>
               <div className="flex items-center gap-3 text-zinc-600 text-[10px] font-black">
