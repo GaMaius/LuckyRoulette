@@ -730,6 +730,12 @@ drawStation=function(s,t,highlight){
   let yy=y-64+Math.sin(t*4)*5;
   ctx.save();ctx.shadowColor='#ffcc72';ctx.shadowBlur=12;textAt('◆',x,yy,21,'#ffda8c');ctx.restore();
  }
+ if(state.phase==='receiving'&&['delivery','dry','cold','magic'].includes(s.id)){
+  const tags={delivery:'01 · 배송',dry:'일반',cold:'냉장',magic:'마법'};
+  const bx=x-28,by=y-57;
+  hdPanel(bx,by,58,21,'#201929ef','#dfbd88');
+  textAt(tags[s.id],x,by+11,10,'#fceaca');
+ }
  if(near||highlight||running){
   const tw=Math.max(90,s.name.length*12+24);
   hdPanel(x-tw/2,y+33,tw,27,highlight?'#4b3040ee':'#1c1729e8',highlight?'#ffe0a0':'#896f85');
@@ -761,8 +767,13 @@ drawPlayer=function(t){
  const p=state.player;
  // Crisp but illustrated character art (originally authored for this game).
  const bob=Math.sin(t*(p.moving?12:3))*((p.moving)?2:0.6);
- const displayW=74,displayH=98;
- shadow(p.x,p.y+14,30,9);
+ const displayW=93,displayH=122;
+ shadow(p.x,p.y+20,38,13);
+ // Visible user marker: the courier must remain distinct from the rich static scenery.
+ ctx.save();ctx.strokeStyle='#ffe59b';ctx.lineWidth=2.5;
+ ctx.shadowColor='#ffe5a4';ctx.shadowBlur=12;
+ ctx.beginPath();ctx.ellipse(p.x,p.y+22,33,13,0,0,TAU);ctx.stroke();
+ ctx.restore();
  if(DIO_COURIER.complete&&DIO_COURIER.naturalWidth){
   ctx.save();ctx.translate(p.x,p.y-41+bob);
   if(p.face===-1)ctx.scale(-1,1);
@@ -775,8 +786,8 @@ drawPlayer=function(t){
   const icon=state.carry.type==='box'?'▣':state.carry.type==='product'?'✦':ITEMS[state.carry.key].icon;
   textAt(icon,p.x+36,p.y-59,20,'#fff0cc');ctx.restore();
  }
- hdPanel(p.x-29,p.y+18,58,20,'#181324ed','#ddbb87');
- textAt('YOU',p.x,p.y+29,10,'#ffe4a9');
+ hdPanel(p.x-34,p.y+27,68,22,'#120f20f3','#ffe2a2');
+ textAt('● YOU',p.x,p.y+39,12,'#ffe9b4');
 };
 drawHudOnCanvas=function(t){
  // Minimal, legible diegetic labels: world not buried under controls.
@@ -787,8 +798,8 @@ drawHudOnCanvas=function(t){
  if(['receiving','open'].includes(state.phase)&&s){
   const delta=Math.hypot(s.x-state.player.x,s.y-state.player.y);
   if(delta>90){
-   ctx.save();ctx.strokeStyle='#ffe3aa86';ctx.lineWidth=2;
-   ctx.setLineDash([3,11]);ctx.lineDashOffset=-t*20;
+   ctx.save();ctx.strokeStyle='#ffe3aacf';ctx.lineWidth=3.4;
+   ctx.setLineDash([6,9]);ctx.lineDashOffset=-t*20;
    ctx.beginPath();ctx.moveTo(state.player.x,state.player.y+8);ctx.lineTo(s.x,s.y+11);ctx.stroke();ctx.restore();
   }
  }
@@ -803,6 +814,28 @@ emitSound=function(type='tap'){
   const scene=document.getElementById('canvasWrap');
   if(scene){scene.classList.remove('dio-impulse');void scene.offsetWidth;scene.classList.add('dio-impulse');}
  }
+};
+// Concise contextual guidance: one action at a time, no overlapping long instruction blocks.
+const origDioGoal=goal;
+goal=function(){
+ const g=origDioGoal();
+ if(state.phase==='receiving'){
+  if(state.carry?.type==='box'){
+   const category=CATS[state.carry.cat]?.short||'재료';
+   return {...g,title:category+' 선반에 상자 놓기',desc:'빛나는 '+category+' 선반 근처에서 E를 누르세요.'};
+  }
+  if(state.boxes.length) return {...g,title:'배송 상자 집기',desc:'왼쪽 아래의 빛나는 배송 상자에 다가가 E를 누르세요.'};
+  return {...g,title:'영업 시작하기',desc:'재고 정리 완료! 판매대로 가서 E 또는 C를 누르세요.'};
+ }
+ return g;
+};
+const origDioAtelierUI=renderAtelierUI;
+renderAtelierUI=function(){
+ origDioAtelierUI();
+ const top=document.querySelector('#guideCard .panelHeading span');if(top)top.textContent='◆ 지금 할 일';
+ const recipe=document.querySelector('#selectedCard .panelHeading span');if(recipe&&state.phase==='open')recipe.textContent='◆ 현재 제작 주문';
+ const route=document.getElementById('goToObjective');if(route)route.textContent='↗ 목표로 자동 이동';
+ const shortRoute=document.getElementById('routeBtn');if(shortRoute)shortRoute.textContent='↗ 길찾기';
 };
 // Optional debug UI for reproducible screenshot tests.
 window.MM_DIORAMA={version:'2.0-alpha',assetLoaded:()=>DIO_BG.complete&&DIO_BG.naturalWidth>0,stationCoords:()=>Object.fromEntries(STATIONS.map(s=>[s.id,[s.x,s.y]]))};
